@@ -13,6 +13,10 @@ Teach it once. It repeats forever. 24/7.
 
 ---
 
+![Sediman Demo](demo.gif)
+
+---
+
 ## It's not a scraper. It's not an API wrapper. It's a browser employee.
 
 You click the same 10 things every morning. Copy-paste data into spreadsheets. Check the same sites every hour. Post the same kind of content every day.
