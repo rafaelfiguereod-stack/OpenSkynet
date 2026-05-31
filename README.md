@@ -4,6 +4,8 @@
 
 **Your AI Terminator**
 
+<img width="1024" height="1024" alt="ChatGPT Image May 31, 2026, 01_05_18 PM" src="https://github.com/user-attachments/assets/4c45d3d6-77ba-4d38-ac3e-72da508b3501" />
+
 Teach it once. It repeats forever. 24/7.
 
 [![License: BSL 1.1](https://img.shields.io/badge/License-BSL%201.1-blue.svg)](LICENSE)
@@ -13,7 +15,7 @@ Teach it once. It repeats forever. 24/7.
 
 ---
 
-<img width="1246" height="854" alt="OpenSkynet TUI" src="https://github.com/user-attachments/assets/5ff49600-0002-42c5-b307-9ba4b0a1afef" />
+<img width="1260" height="786" alt="Screenshot 2026-05-31 at 11 02 13 PM" src="https://github.com/user-attachments/assets/a769b61c-c693-4018-9b85-662f1df28e19" />
 
 ---
 
@@ -23,12 +25,6 @@ Teach it once. It repeats forever. 24/7.
 curl -fsSL https://raw.githubusercontent.com/sediman-agent/OpenSkynet/main/install | bash
 ```
 
-Then set your API key and go:
-
-```
-export OPENAI_API_KEY=sk-...
-openskynet
-```
 
 ### Agents
 
