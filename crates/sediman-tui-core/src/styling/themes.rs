@@ -281,5 +281,6 @@ mod tests {
 
     #[test]
     fn test_json_loader_invalid() { assert!(load_theme_from_json("bad").is_none()); }
+    #[test]
     fn test_json_loader_empty() { assert!(load_theme_from_json("").is_none()); }
 }
