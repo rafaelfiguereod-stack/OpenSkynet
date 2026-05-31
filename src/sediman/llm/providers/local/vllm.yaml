@@ -1,0 +1,9 @@
+name: vllm
+display_name: vLLM
+category: local
+api_key_env: null
+base_url: http://localhost:8000/v1
+models:
+  default: auto
+  auto_detect: true
+  list: []

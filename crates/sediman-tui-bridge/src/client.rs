@@ -376,6 +376,7 @@ impl ApiClient {
                 category: p.get("category").and_then(|v| v.as_str()).unwrap_or("cloud").to_string(),
                 needs_api_key: p.get("needs_api_key").and_then(|v| v.as_bool()).unwrap_or(true),
                 has_key: p.get("has_key").and_then(|v| v.as_bool()).unwrap_or(false),
+                auto_detect: p.get("auto_detect").and_then(|v| v.as_bool()).unwrap_or(false),
             });
         }
         Ok(result)
@@ -421,6 +422,7 @@ pub struct ProviderInfo {
     pub category: String,
     pub needs_api_key: bool,
     pub has_key: bool,
+    pub auto_detect: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -428,6 +430,28 @@ pub struct ModelInfo {
     pub id: String,
     pub name: String,
     pub provider: String,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct IntegrationInfo {
+    pub name: String,
+    pub configured: bool,
+    pub connected: bool,
+    pub enabled: bool,
+}
+
+impl ApiClient {
+    pub async fn list_integrations(&self) -> BridgeResult<Vec<IntegrationInfo>> {
+        self.call("list_integrations", serde_json::json!({})).await
+    }
+
+    pub async fn integration_status(&self, name: &str) -> BridgeResult<IntegrationInfo> {
+        self.call("integration_status", serde_json::json!({"name": name})).await
+    }
+
+    pub async fn configure_integration(&self, name: &str, config: serde_json::Value) -> BridgeResult<()> {
+        self.call("configure_integration", serde_json::json!({"name": name, "config": config})).await
+    }
 }
 
 #[cfg(test)]

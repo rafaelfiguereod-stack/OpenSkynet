@@ -103,23 +103,23 @@ class TestCreateProvider:
     def test_creates_openai_provider(self):
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             provider = create_provider("openai")
-        assert provider.model == "gpt-4o"
+        assert provider.model == "gpt-5.1-codex"
 
     def test_creates_ollama_provider(self):
         provider = create_provider("ollama")
-        assert provider.model == "qwen3"
+        assert provider.model == "qwen3-coder:480b"
         assert provider.base_url == "http://localhost:11434/v1"
 
     def test_creates_deepseek_provider(self):
         with patch.dict("os.environ", {"DEEPSEEK_API_KEY": "dsk-test"}):
             provider = create_provider("deepseek")
-        assert provider.model == "deepseek-chat"
+        assert provider.model == "deepseek-v4-pro"
         assert "deepseek" in (provider.base_url or "")
 
     def test_creates_glm_provider(self):
         with patch.dict("os.environ", {"GLM_API_KEY": "glm-test"}):
             provider = create_provider("glm")
-        assert provider.model == "glm-4-flash"
+        assert provider.model == "glm-5.1"
         assert "bigmodel" in (provider.base_url or "")
 
     def test_creates_vllm_provider(self):

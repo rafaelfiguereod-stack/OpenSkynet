@@ -136,7 +136,7 @@ async fn check_ai_llm(bridge: &sediman_tui_bridge::ApiClient, provider: &str) ->
         message: if has_key {
             format!("configured ({})", provider)
         } else {
-            "not set — use /connect".into()
+            "not set — use /provider".into()
         },
         optional: false,
         install_cmd: None,

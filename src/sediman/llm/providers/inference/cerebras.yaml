@@ -1,0 +1,14 @@
+name: cerebras
+display_name: Cerebras
+category: inference
+api_key_env: CEREBRAS_API_KEY
+base_url: https://api.cerebras.ai/v1
+models:
+  default: gpt-oss-120b
+  list:
+    - id: gpt-oss-120b
+      name: GPT OSS 120B
+    - id: zai-glm-4.7
+      name: GLM 4.7
+    - id: llama3.1-8b
+      name: Llama 3.1 8B

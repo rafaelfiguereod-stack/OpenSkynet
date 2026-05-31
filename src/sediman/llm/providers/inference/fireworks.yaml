@@ -1,0 +1,24 @@
+name: fireworks
+display_name: Fireworks AI
+category: inference
+api_key_env: FIREWORKS_API_KEY
+base_url: https://api.fireworks.ai/inference/v1
+models:
+  default: accounts/fireworks/models/gpt-oss-120b
+  list:
+    - id: accounts/fireworks/models/gpt-oss-120b
+      name: GPT OSS 120B
+    - id: accounts/fireworks/models/gpt-oss-20b
+      name: GPT OSS 20B
+    - id: accounts/fireworks/models/deepseek-v4-flash
+      name: DeepSeek V4 Flash
+    - id: accounts/fireworks/models/deepseek-v4-pro
+      name: DeepSeek V4 Pro
+    - id: accounts/fireworks/models/kimi-k2p6
+      name: Kimi K2.6
+    - id: accounts/fireworks/models/glm-5p1
+      name: GLM 5.1
+    - id: accounts/fireworks/models/minimax-m2p5
+      name: MiniMax M2.5
+    - id: accounts/fireworks/models/qwen3p6-plus
+      name: Qwen 3.6 Plus

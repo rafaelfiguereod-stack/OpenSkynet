@@ -1,0 +1,24 @@
+name: mistral
+display_name: Mistral
+category: cloud
+api_key_env: MISTRAL_API_KEY
+base_url: https://api.mistral.ai/v1
+models:
+  default: devstral-medium-latest
+  list:
+    - id: devstral-medium-latest
+      name: Devstral 2 (latest)
+    - id: devstral-small-2507
+      name: Devstral Small
+    - id: codestral-latest
+      name: Codestral (latest)
+    - id: mistral-large-latest
+      name: Mistral Large (latest)
+    - id: mistral-medium-latest
+      name: Mistral Medium (latest)
+    - id: mistral-small-latest
+      name: Mistral Small (latest)
+    - id: magistral-medium-latest
+      name: Magistral Medium (latest)
+    - id: magistral-small
+      name: Magistral Small

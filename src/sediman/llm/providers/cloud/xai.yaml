@@ -1,0 +1,18 @@
+name: xai
+display_name: xAI
+category: cloud
+api_key_env: XAI_API_KEY
+base_url: https://api.x.ai/v1
+models:
+  default: grok-4.3
+  list:
+    - id: grok-4.3
+      name: Grok 4.3
+    - id: grok-4.20-0309-reasoning
+      name: Grok 4.20 (Reasoning)
+    - id: grok-4.20-0309-non-reasoning
+      name: Grok 4.20 (Non-Reasoning)
+    - id: grok-4.20-multi-agent-0309
+      name: Grok 4.20 Multi-Agent
+    - id: grok-build-0.1
+      name: Grok Build 0.1

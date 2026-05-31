@@ -58,7 +58,7 @@ def _capture_exception(exc: Exception) -> None:
         pass
 from sediman.agent.loop import AgentLoop, AgentResult, StepEvent
 from sediman.browser.session import BrowserSession
-from sediman.llm.provider import create_provider, LLMProvider, PROVIDERS
+from sediman.llm.provider import create_provider, LLMProvider
 
 logger = structlog.get_logger()
 
@@ -135,6 +135,12 @@ async def _get_agent_loop() -> AgentLoop:
 def _reset_state() -> None:
     global _browser, _llm, _agent_loop
     _browser = None
+    _llm = None
+    _agent_loop = None
+
+
+def _reset_llm() -> None:
+    global _llm, _agent_loop
     _llm = None
     _agent_loop = None
 
@@ -311,13 +317,24 @@ async def handle_skills_run(params: dict[str, Any], notify: NotifyFn | None = No
 async def handle_model_switch(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
     provider = (params.get("provider") or "").strip()
     model = (params.get("model") or "").strip() or None
+    base_url = (params.get("base_url") or "").strip() or None
     if not provider:
         raise ValueError("provider is required")
+
+    from sediman.llm.provider import PROVIDERS
+
+    if provider not in PROVIDERS:
+        raise ValueError(
+            f"Unknown provider: {provider}. Available: {', '.join(sorted(PROVIDERS.keys()))}"
+        )
+
     _llm_config["provider"] = provider
     if model:
         _llm_config["model"] = model
-    _reset_state()
-    return {"provider": provider, "model": model}
+    if base_url:
+        _llm_config["base_url"] = base_url
+    _reset_llm()
+    return {"provider": provider, "model": model, "base_url": base_url}
 
 
 async def handle_model_list_providers(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:

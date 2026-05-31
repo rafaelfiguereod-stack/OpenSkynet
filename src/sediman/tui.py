@@ -1023,6 +1023,8 @@ class SedimanTUI:
             _cprint(f"  \033[31mX {result.message}\033[0m")
 
     async def _cmd_model(self, args: str) -> None:
+        from sediman.llm.provider import PROVIDERS
+
         if not args:
             _cprint(
                 f"  Current: \033[32m{self.provider}\033[0m / \033[32m{self.model or 'default'}\033[0m"
@@ -1044,6 +1046,7 @@ class SedimanTUI:
         self.provider = provider
         self.model = model
         self._llm = None
+        self.base_url = PROVIDERS.get(provider, {}).get("base_url") or self.base_url
         conv = self._agent.get_conversation() if self._agent else []
         self._agent = None
 

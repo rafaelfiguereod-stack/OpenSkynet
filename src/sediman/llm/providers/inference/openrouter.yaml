@@ -1,0 +1,48 @@
+name: openrouter
+display_name: OpenRouter
+category: inference
+api_key_env: OPENROUTER_API_KEY
+base_url: https://openrouter.ai/api/v1
+models:
+  default: openai/gpt-5.1-codex
+  list:
+    - id: openai/gpt-5.1-codex
+      name: GPT 5.1 Codex
+    - id: openai/gpt-5.2
+      name: GPT 5.2
+    - id: openai/gpt-5.4
+      name: GPT 5.4
+    - id: openai/gpt-5.5
+      name: GPT 5.5
+    - id: openai/gpt-4o
+      name: GPT 4o
+    - id: openai/o4-mini
+      name: o4 Mini
+    - id: openai/o3
+      name: o3
+    - id: anthropic/claude-sonnet-4.5
+      name: Claude Sonnet 4.5
+    - id: anthropic/claude-opus-4.5
+      name: Claude Opus 4.5
+    - id: anthropic/claude-opus-4.8
+      name: Claude Opus 4.8
+    - id: google/gemini-2.5-pro
+      name: Gemini 2.5 Pro
+    - id: google/gemini-2.5-flash
+      name: Gemini 2.5 Flash
+    - id: deepseek/deepseek-v4-pro
+      name: DeepSeek V4 Pro
+    - id: deepseek/deepseek-chat
+      name: DeepSeek Chat
+    - id: qwen/qwen3-coder
+      name: Qwen3 Coder 480B
+    - id: qwen/qwen3.7-max
+      name: Qwen3.7 Max
+    - id: moonshotai/kimi-k2.6
+      name: Kimi K2.6
+    - id: meta-llama/llama-4-maverick
+      name: Llama 4 Maverick
+    - id: x-ai/grok-4.3
+      name: Grok 4.3
+    - id: mistralai/devstral-medium
+      name: Devstral Medium

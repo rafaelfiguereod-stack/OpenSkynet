@@ -1,0 +1,16 @@
+name: minimax-global
+display_name: MiniMax Global
+category: cloud
+api_key_env: MINIMAX_API_KEY
+base_url: https://api.minimaxi.chat/v1
+models:
+  default: MiniMax-M2.5
+  list:
+    - id: MiniMax-M2.5
+      name: MiniMax M2.5
+    - id: MiniMax-M2.7
+      name: MiniMax M2.7
+    - id: MiniMax-M2.1
+      name: MiniMax M2.1
+    - id: MiniMax-M2
+      name: MiniMax M2

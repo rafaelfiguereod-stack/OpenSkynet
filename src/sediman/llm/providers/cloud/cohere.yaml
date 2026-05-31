@@ -1,0 +1,16 @@
+name: cohere
+display_name: Cohere
+category: cloud
+api_key_env: COHERE_API_KEY
+base_url: https://api.cohere.ai/v2
+models:
+  default: command-a-03-2025
+  list:
+    - id: command-a-03-2025
+      name: Command A
+    - id: command-a-reasoning-08-2025
+      name: Command A Reasoning
+    - id: command-r-plus-08-2024
+      name: Command R+
+    - id: command-r-08-2024
+      name: Command R

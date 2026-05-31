@@ -134,8 +134,10 @@ pub struct App {
     pub model_dialog_provider_idx: usize,
     pub model_dialog_model_idx: usize,
     pub model_dialog_scroll: usize,
+    pub model_dialog_filter: String,
     pub available_providers: Vec<sediman_tui_bridge::ProviderInfo>,
     pub connect_target: Option<String>,
+    pub connect_pending_model: Option<String>,
     pub api_key_input: String,
     pub model_list: Vec<sediman_tui_bridge::ModelInfo>,
     // Memory editor state
@@ -310,8 +312,10 @@ impl App {
             model_dialog_provider_idx: 0,
             model_dialog_model_idx: 0,
             model_dialog_scroll: 0,
+            model_dialog_filter: String::new(),
             available_providers: Vec::new(),
             connect_target: None,
+            connect_pending_model: None,
             api_key_input: String::new(),
             model_list: Vec::new(),
             memory_entries: Vec::new(),
@@ -441,6 +445,7 @@ impl App {
     }
 
     /// Get models for the active provider tab, sorted reverse alphabetical (OpenCode: latest first).
+    #[allow(dead_code)]
     pub fn filtered_models_for_provider(&self, provider_name: &str) -> Vec<&sediman_tui_bridge::ModelInfo> {
         let mut models: Vec<&sediman_tui_bridge::ModelInfo> = self.model_list
             .iter()
@@ -452,14 +457,8 @@ impl App {
 
     /// Initialize the model dialog state for the current provider/model.
     pub fn open_model_dialog(&mut self) {
-        // Find the provider tab for the current provider
-        self.model_dialog_provider_idx = self
-            .available_providers
-            .iter()
-            .position(|p| p.name == self.provider)
-            .unwrap_or(0);
-        // Find the model within that provider's list
-        let models = self.filtered_models_for_provider(&self.provider);
+        self.model_dialog_filter.clear();
+        let models = self.filtered_models_flat();
         self.model_dialog_model_idx = models
             .iter()
             .position(|m| {
@@ -467,8 +466,59 @@ impl App {
                 full == self.display_model_id() || m.id == self.model.as_deref().unwrap_or("")
             })
             .unwrap_or(0);
-        self.model_dialog_scroll = 0;
+        self.model_dialog_scroll = if self.model_dialog_model_idx > 6 {
+            self.model_dialog_model_idx - 3
+        } else {
+            0
+        };
         self.active_modal = Some(AppModal::ModelPicker);
+    }
+
+    pub fn filtered_models_flat(&self) -> Vec<&sediman_tui_bridge::ModelInfo> {
+        let query = self.model_dialog_filter.to_lowercase();
+        let mut models: Vec<&sediman_tui_bridge::ModelInfo> = self
+            .model_list
+            .iter()
+            .filter(|m| {
+                if query.is_empty() {
+                    return true;
+                }
+                let searchable = format!("{} {} {}", m.provider, m.id, m.name).to_lowercase();
+                searchable.contains(&query)
+            })
+            .collect();
+        models.sort_by(|a, b| {
+            let cat_a = self.available_providers.iter().find(|p| p.name == a.provider).map(|p| p.category.as_str()).unwrap_or("");
+            let cat_b = self.available_providers.iter().find(|p| p.name == b.provider).map(|p| p.category.as_str()).unwrap_or("");
+            cat_a.cmp(cat_b).then_with(|| a.provider.cmp(&b.provider)).then_with(|| b.name.cmp(&a.name))
+        });
+        models
+    }
+
+    const MODEL_DIALOG_VISIBLE: usize = 12;
+
+    pub fn clamp_model_scroll(&mut self) {
+        let models = self.filtered_models_flat();
+        let idx = self.model_dialog_model_idx;
+        let mut display_pos = 0usize;
+        let mut last_provider: Option<&str> = None;
+        let mut target_pos = 0usize;
+        for (i, m) in models.iter().enumerate() {
+            if last_provider != Some(m.provider.as_str()) {
+                last_provider = Some(m.provider.as_str());
+                display_pos += 1;
+            }
+            if i == idx {
+                target_pos = display_pos;
+                break;
+            }
+            display_pos += 1;
+        }
+        if target_pos < self.model_dialog_scroll {
+            self.model_dialog_scroll = target_pos;
+        } else if target_pos >= self.model_dialog_scroll + Self::MODEL_DIALOG_VISIBLE {
+            self.model_dialog_scroll = target_pos - (Self::MODEL_DIALOG_VISIBLE - 1);
+        }
     }
 }
 

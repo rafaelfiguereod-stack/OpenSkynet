@@ -1,0 +1,9 @@
+name: llamacpp
+display_name: llama.cpp
+category: local
+api_key_env: null
+base_url: http://127.0.0.1:8080/v1
+models:
+  default: auto
+  auto_detect: true
+  list: []

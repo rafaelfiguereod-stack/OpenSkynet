@@ -7,7 +7,7 @@ use sediman_tui_core::event::AppEvent;
 
 use crate::app::{App, AppModal};
 use crate::commands::{
-    browser, coder, connect, delegate, hub, memory, model, plan, provider, schedule, sessions,
+    browser, coder, delegate, hub, memory, model, plan, provider, schedule, sessions,
     skills, soul, system, theming,
 };
 
@@ -71,116 +71,101 @@ pub async fn handle_message(app: &mut App, event: AppEvent, event_tx: &mpsc::Unb
 
             // ── Unified modal key handling ──
             if app.active_modal.is_some() {
-                // ── Unified ModelPicker — exact OpenCode copy: ←/→/H/L provider, ↑/↓/J/K model ──
+                // ── ModelPicker — search + ↑/↓ navigate + Enter select ──
                 if matches!(app.active_modal, Some(AppModal::ModelPicker)) {
                     match key.code {
                         KeyCode::Esc => {
+                            app.model_dialog_filter.clear();
                             app.active_modal = None;
                             return;
                         }
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            app.model_dialog_filter.clear();
                             app.active_modal = None;
                             return;
                         }
-                        // ← / H: previous provider (wraps around)
-                        KeyCode::Left | KeyCode::Char('h') => {
-                            if app.available_providers.len() > 1 {
-                                if app.model_dialog_provider_idx > 0 {
-                                    app.model_dialog_provider_idx -= 1;
-                                } else {
-                                    app.model_dialog_provider_idx = app.available_providers.len().saturating_sub(1);
-                                }
-                                app.model_dialog_model_idx = 0;
-                                app.model_dialog_scroll = 0;
-                            }
-                            return;
-                        }
-                        // → / L: next provider (wraps around)
-                        KeyCode::Right | KeyCode::Char('l') => {
-                            if app.available_providers.len() > 1 {
-                                if app.model_dialog_provider_idx < app.available_providers.len().saturating_sub(1) {
-                                    app.model_dialog_provider_idx += 1;
-                                } else {
-                                    app.model_dialog_provider_idx = 0;
-                                }
-                                app.model_dialog_model_idx = 0;
-                                app.model_dialog_scroll = 0;
-                            }
-                            return;
-                        }
-                        // ↑ / K: previous model (wraps to bottom)
-                        KeyCode::Up | KeyCode::Char('k') => {
-                            let provider_name = app.available_providers
-                                .get(app.model_dialog_provider_idx)
-                                .map(|p| p.name.as_str())
-                                .unwrap_or("");
-                            let count = app.filtered_models_for_provider(provider_name).len();
+                        KeyCode::Up => {
+                            let models = app.filtered_models_flat();
+                            if models.is_empty() { return; }
                             if app.model_dialog_model_idx > 0 {
                                 app.model_dialog_model_idx -= 1;
                             } else {
-                                // Wrap to bottom
-                                app.model_dialog_model_idx = count.saturating_sub(1);
-                                app.model_dialog_scroll = count.saturating_sub(10.min(count));
+                                app.model_dialog_model_idx = models.len() - 1;
                             }
-                            // Keep cursor visible
-                            if app.model_dialog_model_idx < app.model_dialog_scroll {
-                                app.model_dialog_scroll = app.model_dialog_model_idx;
-                            }
+                            app.clamp_model_scroll();
                             return;
                         }
-                        // ↓ / J: next model (wraps to top)
-                        KeyCode::Down | KeyCode::Char('j') => {
-                            let provider_name = app.available_providers
-                                .get(app.model_dialog_provider_idx)
-                                .map(|p| p.name.as_str())
-                                .unwrap_or("");
-                            let count = app.filtered_models_for_provider(provider_name).len();
-                            if app.model_dialog_model_idx < count.saturating_sub(1) {
+                        KeyCode::Down => {
+                            let models = app.filtered_models_flat();
+                            if models.is_empty() { return; }
+                            if app.model_dialog_model_idx < models.len() - 1 {
                                 app.model_dialog_model_idx += 1;
                             } else {
-                                // Wrap to top
                                 app.model_dialog_model_idx = 0;
-                                app.model_dialog_scroll = 0;
                             }
-                            // Keep cursor visible (max 10 visible)
-                            let visible = 10;
-                            if app.model_dialog_model_idx >= app.model_dialog_scroll + visible {
-                                app.model_dialog_scroll = app.model_dialog_model_idx - (visible - 1);
+                            app.clamp_model_scroll();
+                            return;
+                        }
+                        KeyCode::Enter => {
+                            let models = app.filtered_models_flat();
+                            if let Some(selected_model) = models.get(app.model_dialog_model_idx).cloned() {
+                                let provider_name = selected_model.provider.clone();
+                                let model_id = selected_model.id.clone();
+                                let base_url = app
+                                    .available_providers
+                                    .iter()
+                                    .find(|p| p.name == provider_name)
+                                    .and_then(|p| p.default_base_url.clone());
+                                let needs_key = app
+                                    .available_providers
+                                    .iter()
+                                    .find(|p| p.name == provider_name)
+                                    .map(|p| p.needs_api_key && !p.has_key)
+                                    .unwrap_or(false);
+                                if needs_key {
+                                    app.connect_target = Some(provider_name.clone());
+                                    app.connect_pending_model = Some(model_id.clone());
+                                    app.api_key_input.clear();
+                                    app.active_modal = Some(AppModal::ApiKeyPrompt);
+                                    return;
+                                }
+                                if let Err(e) = app.bridge.switch_model(
+                                    &provider_name,
+                                    Some(&model_id),
+                                    base_url.as_deref(),
+                                ).await {
+                                    app.add_error_message(format!("Failed to switch: {}", e));
+                                    app.model_dialog_filter.clear();
+                                    app.active_modal = None;
+                                    return;
+                                }
+                                app.provider = provider_name.clone();
+                                app.model = Some(model_id);
+                                if let Some(url) = &base_url {
+                                    app.base_url = Some(url.clone());
+                                }
+                                app.add_system_message(format!("Switched to {}", app.display_model_id()));
+                            }
+                            app.model_dialog_filter.clear();
+                            app.active_modal = None;
+                            if let Ok(providers) = app.bridge.list_providers().await {
+                                app.available_providers = providers;
+                            }
+                            if let Ok(models) = app.bridge.list_models(None).await {
+                                app.model_list = models;
                             }
                             return;
                         }
-                        // Enter: select model and sync with backend
-                        KeyCode::Enter => {
-                            let provider_info = app.available_providers
-                                .get(app.model_dialog_provider_idx)
-                                .cloned();
-                            if let Some(p) = provider_info {
-                                let models = app.filtered_models_for_provider(&p.name);
-                                if let Some(selected_model) = models.get(app.model_dialog_model_idx) {
-                                    // Check if provider needs API key and doesn't have one
-                                    if p.needs_api_key && !p.has_key {
-                                        app.connect_target = Some(p.name.clone());
-                                        app.api_key_input.clear();
-                                        app.active_modal = Some(AppModal::ApiKeyPrompt);
-                                        return;
-                                    }
-                                    // Sync with backend
-                                    let model_id = selected_model.id.clone();
-                                    if let Err(e) = app.bridge.switch_model(
-                                        &p.name,
-                                        Some(&model_id),
-                                        p.default_base_url.as_deref(),
-                                    ).await {
-                                        app.add_error_message(format!("Failed to switch: {}", e));
-                                        app.active_modal = None;
-                                        return;
-                                    }
-                                    app.provider = p.name.clone();
-                                    app.model = Some(model_id);
-                                    app.add_system_message(format!("Switched to {}", app.display_model_id()));
-                                }
-                            }
-                            app.active_modal = None;
+                        KeyCode::Backspace => {
+                            app.model_dialog_filter.pop();
+                            app.model_dialog_model_idx = 0;
+                            app.model_dialog_scroll = 0;
+                            return;
+                        }
+                        KeyCode::Char(c) => {
+                            app.model_dialog_filter.push(c);
+                            app.model_dialog_model_idx = 0;
+                            app.model_dialog_scroll = 0;
                             return;
                         }
                         _ => return,
@@ -239,12 +224,14 @@ pub async fn handle_message(app: &mut App, event: AppEvent, event_tx: &mpsc::Unb
                         KeyCode::Esc => {
                             app.api_key_input.clear();
                             app.connect_target = None;
+                            app.connect_pending_model = None;
                             app.active_modal = None;
                             return;
                         }
                         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                             app.api_key_input.clear();
                             app.connect_target = None;
+                            app.connect_pending_model = None;
                             app.active_modal = None;
                             return;
                         }
@@ -254,11 +241,33 @@ pub async fn handle_message(app: &mut App, event: AppEvent, event_tx: &mpsc::Unb
                                 let key_val = app.api_key_input.clone();
                                 match app.bridge.auth_set(&target, &key_val).await {
                                     Ok(()) => {
-                                        app.provider = target.clone();
+                                        let pending_model = app.connect_pending_model.clone();
+                                        let base_url = app
+                                            .available_providers
+                                            .iter()
+                                            .find(|p| p.name == target)
+                                            .and_then(|p| p.default_base_url.clone());
+                                        let model_id = pending_model.as_deref().unwrap_or("default");
+                                        if let Err(e) = app.bridge.switch_model(
+                                            &target,
+                                            Some(model_id),
+                                            base_url.as_deref(),
+                                        ).await {
+                                            app.add_error_message(format!("Key saved but switch failed: {}", e));
+                                        } else {
+                                            app.provider = target.clone();
+                                            app.model = Some(model_id.to_string());
+                                            if let Some(url) = base_url {
+                                                app.base_url = Some(url);
+                                            }
+                                            app.add_system_message(format!("Switched to {}", app.display_model_id()));
+                                        }
                                         if let Ok(providers) = app.bridge.list_providers().await {
                                             app.available_providers = providers;
                                         }
-                                        app.add_system_message(format!("Key saved for {} — provider switched.", target));
+                                        if let Ok(models) = app.bridge.list_models(None).await {
+                                            app.model_list = models;
+                                        }
                                     }
                                     Err(e) => {
                                         app.add_error_message(format!("Failed to save key: {}", e));
@@ -267,6 +276,8 @@ pub async fn handle_message(app: &mut App, event: AppEvent, event_tx: &mpsc::Unb
                             }
                             app.api_key_input.clear();
                             app.connect_target = None;
+                            app.connect_pending_model = None;
+                            app.model_dialog_filter.clear();
                             app.active_modal = None;
                             return;
                         }
@@ -1153,9 +1164,8 @@ async fn handle_slash(app: &mut App, input: &str) {
             refresh_sidebar(app).await;
         }
         "/remember" => memory::handle_remember(app, args).await,
-        "/model" | "/models" => model::handle_model(app, args).await,
-        "/provider" => provider::handle_provider(app, args).await,
-        "/connect" => connect::handle_connect(app, args).await,
+        "/models" => model::handle_models(app, args).await,
+        "/provider" | "/connect" => provider::handle_provider(app, args).await,
         "/schedule" => {
             schedule::handle_schedule(app, args).await;
             refresh_sidebar(app).await;

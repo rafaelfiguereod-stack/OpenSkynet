@@ -1,0 +1,30 @@
+name: dashscope
+display_name: DashScope (Qwen)
+category: cloud-cn
+api_key_env: DASHSCOPE_API_KEY
+base_url: https://dashscope.aliyuncs.com/compatible-mode/v1
+models:
+  default: qwen3-coder
+  list:
+    - id: qwen3-coder
+      name: Qwen3 Coder 480B
+    - id: qwen3-coder-plus
+      name: Qwen3 Coder Plus
+    - id: qwen3-coder-next
+      name: Qwen3 Coder Next
+    - id: qwen3-coder-flash
+      name: Qwen3 Coder Flash
+    - id: qwen3.7-max
+      name: Qwen3.7 Max
+    - id: qwen3.6-plus
+      name: Qwen3.6 Plus
+    - id: qwen3-max
+      name: Qwen3 Max
+    - id: qwen3-235b-a22b
+      name: Qwen3 235B
+    - id: qwen3-30b-a3b
+      name: Qwen3 30B
+    - id: qwq-plus
+      name: QwQ Plus
+    - id: qwen-plus
+      name: Qwen Plus

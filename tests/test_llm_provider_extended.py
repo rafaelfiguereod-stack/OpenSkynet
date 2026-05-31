@@ -179,7 +179,7 @@ class TestCreateProviderExtended:
     def test_openai_default_model(self):
         with patch.dict("os.environ", {"OPENAI_API_KEY": "test-key"}):
             provider = create_provider("openai")
-        assert provider.model == "gpt-4o"
+        assert provider.model == "gpt-5.1-codex"
 
     def test_ollama_custom_base_url(self):
         provider = create_provider("ollama", base_url="http://localhost:11434/v1")
@@ -187,11 +187,11 @@ class TestCreateProviderExtended:
 
     def test_ollama_default_model(self):
         provider = create_provider("ollama")
-        assert provider.model == "qwen3"
+        assert provider.model == "qwen3-coder:480b"
 
     def test_unknown_provider(self):
         with pytest.raises(ValueError, match="Unknown provider"):
-            create_provider("anthropic")
+            create_provider("nonexistent_provider_xyz")
 
     def test_custom_api_key(self):
         with patch.dict("os.environ", {}, clear=True):
@@ -215,12 +215,12 @@ class TestPROVIDERS:
 
     def test_openai_config(self):
         config = PROVIDERS["openai"]
-        assert config["model"] == "gpt-4o"
+        assert config["model"] == "gpt-5.1-codex"
         assert "api_key_env" in config
 
     def test_ollama_config(self):
         config = PROVIDERS["ollama"]
-        assert config["model"] == "qwen3"
+        assert config["model"] == "qwen3-coder:480b"
         assert "http://localhost:11434/v1" in config["base_url"]
 
     def test_all_have_required_keys(self):

@@ -109,8 +109,8 @@ pub fn render_help_modal(buf: &mut CellBuffer, area: Rect, app: &App, scroll: us
             ("/reset", "Full reset \u{2014} clear everything"),
         ]),
         ("Agent", &[
-            ("/model", "Switch or search AI models"),
-            ("/provider", "Switch LLM provider"),
+            ("/models", "Search and select AI models"),
+            ("/provider", "Connect provider (enter API key)"),
             ("/plan", "Toggle plan-only mode"),
             ("/compress", "Compress conversation context"),
             ("/soul", "Edit agent personality"),
@@ -137,7 +137,7 @@ pub fn render_help_modal(buf: &mut CellBuffer, area: Rect, app: &App, scroll: us
         ]),
         ("Utilities", &[
             ("/themes", "Browse & apply color themes"),
-            ("/connect", "Connect a new provider"),
+            ("/provider", "Connect provider & enter API key"),
         ]),
     ];
 
@@ -248,99 +248,137 @@ pub fn render_info_modal(
     }
 }
 
-/// OpenCode-style model dialog — 1:1 copy of dialog/models.go View().
+/// OpenCode-style model dialog with search/filter.
 ///
 /// Layout (inside border):
-///   y+1: title "Select {Provider} Model" (Primary, Bold)
-///   y+2: blank (title bottom padding)
-///   y+3..y+3+visible: model items (selected = full row Primary bg)
-///   y+3+visible: scroll indicators (right-aligned, Primary, Bold)
+///   y+1: title "Select Model" (Primary, Bold)
+///   y+2: search input "> filter text_" (with cursor)
+///   y+3: separator line
+///   y+4..y+4+visible: model items (provider/model grouping, selected = full row Primary bg)
+///   last line: scroll indicators
 ///
 /// Border: rounded corners (╭╮╰╯) with TextMuted color.
-/// Width: 44 (40 inner + 2 padding + 2 border).
 pub fn render_model_dialog(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
 
-    let provider_info = app.available_providers.get(app.model_dialog_provider_idx);
-    let provider_name = provider_info.map(|p| p.name.as_str()).unwrap_or("");
-    let models: Vec<&sediman_tui_bridge::ModelInfo> = app.filtered_models_for_provider(provider_name);
+    let models = app.filtered_models_flat();
 
-    const NUM_VISIBLE: usize = 10;
-    const MODAL_W: u16 = 44;
-    let visible = models.len().min(NUM_VISIBLE);
+    #[derive(Clone, Copy)]
+    enum DisplayRow<'a> {
+        Header(&'a str),
+        Model(usize),
+    }
 
-    // Calculate if scroll indicators are needed
-    let has_scroll_up = models.len() > NUM_VISIBLE && app.model_dialog_scroll > 0;
-    let has_scroll_down = models.len() > NUM_VISIBLE && app.model_dialog_scroll + NUM_VISIBLE < models.len();
-    let has_prov_left = app.available_providers.len() > 1 && app.model_dialog_provider_idx > 0;
-    let has_prov_right = app.available_providers.len() > 1 && app.model_dialog_provider_idx < app.available_providers.len().saturating_sub(1);
-    let has_indicators = has_scroll_up || has_scroll_down || has_prov_left || has_prov_right;
+    let mut display_rows: Vec<DisplayRow<'_>> = Vec::new();
+    let mut last_provider: Option<&str> = None;
+    for (i, m) in models.iter().enumerate() {
+        if last_provider != Some(m.provider.as_str()) {
+            last_provider = Some(m.provider.as_str());
+            display_rows.push(DisplayRow::Header(&m.provider));
+        }
+        display_rows.push(DisplayRow::Model(i));
+    }
 
-    // Height: border(2) + top_pad(1) + title(1) + blank(1) + visible + indicators?(0|1) + bottom_pad(1)
-    let modal_h = (6u16 + visible as u16 + if has_indicators { 1u16 } else { 0u16 })
-        .max(8)
+    const NUM_VISIBLE: usize = 12;
+    let modal_w: u16 = (area.width * 70 / 100).max(44).min(60);
+    let total_rows = display_rows.len();
+    let visible = total_rows.min(NUM_VISIBLE);
+
+    let has_scroll_up = app.model_dialog_scroll > 0;
+    let has_scroll_down = total_rows > NUM_VISIBLE && app.model_dialog_scroll + NUM_VISIBLE < total_rows;
+    let has_indicators = has_scroll_up || has_scroll_down;
+
+    let modal_h = (7u16 + visible as u16 + if has_indicators { 1u16 } else { 0u16 })
+        .max(10)
         .min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, MODAL_W, modal_h);
+    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
     let inner_x = frame.inner_x;
+    let inner_w = frame.inner_w;
 
-    // Border: rounded corners, TextMuted color (matching OpenCode exactly)
     let border_style = Style::new().fg(t.text_muted).bg(t.background);
     draw_rounded_border(buf, frame.modal, border_style);
 
-    // y+1: title "Select {Provider} Model" — Primary, Bold
-    let provider_display = if provider_name.is_empty() {
-        "Select Model".to_string()
-    } else {
-        let mut chars = provider_name.chars();
-        let first = chars.next().unwrap_or('?').to_uppercase().collect::<String>();
-        let rest: String = chars.collect();
-        format!("Select {}{} Model", first, rest)
-    };
-    buf.draw_str(inner_x, frame.modal.y + 1, &provider_display,
+    buf.draw_str(inner_x, frame.modal.y + 1, "Select Model",
         Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
 
-    // y+2: blank (title bottom padding — already blank from fill_modal_bg)
+    let search_y = frame.modal.y + 2;
+    buf.draw_str(inner_x, search_y, "> ",
+        Style::new().fg(t.text_muted).bg(t.background));
+    let filter_display = if app.model_dialog_filter.is_empty() {
+        "type to filter...".to_string()
+    } else {
+        app.model_dialog_filter.clone()
+    };
+    let filter_style = if app.model_dialog_filter.is_empty() {
+        Style::new().fg(t.text_muted).bg(t.background)
+    } else {
+        Style::new().fg(t.text).bg(t.background)
+    };
+    let max_filter_w = inner_w.saturating_sub(2) as usize;
+    let truncated_filter: String = filter_display.chars().take(max_filter_w).collect();
+    buf.draw_str(inner_x + 2, search_y, &truncated_filter, filter_style);
 
-    // y+3..y+3+visible: model items
-    let model_start_y = frame.modal.y + 3;
+    if !app.model_dialog_filter.is_empty() {
+        let cursor_x = inner_x + 2 + display_width(&truncated_filter) as u16;
+        if cursor_x < frame.modal.right() - 1 {
+            buf.put_char(cursor_x, search_y, '\u{2588}',
+                Style::new().fg(t.primary).bg(t.background));
+        }
+    } else {
+        buf.put_char(inner_x + 2, search_y, '\u{2588}',
+            Style::new().fg(t.primary).bg(t.background));
+    }
+
+    let sep_y = frame.modal.y + 3;
+    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
+        buf.put_char(sx, sep_y, '\u{2500}', Style::new().fg(t.border_dim));
+    }
+
+    let model_start_y = frame.modal.y + 4;
     let scroll = app.model_dialog_scroll;
 
-    if models.is_empty() {
-        buf.draw_str(inner_x, model_start_y, "No models available.",
+    if display_rows.is_empty() {
+        buf.draw_str(inner_x, model_start_y, "No models match filter.",
             Style::new().fg(t.text_muted).bg(t.background));
     } else {
-        let end_idx = (scroll + NUM_VISIBLE).min(models.len());
-        for i in scroll..end_idx {
-            let row_y = model_start_y + (i - scroll) as u16;
+        let end_idx = (scroll + NUM_VISIBLE).min(display_rows.len());
+        for vis in 0..(end_idx - scroll) {
+            let row_y = model_start_y + vis as u16;
             if row_y >= frame.modal.bottom().saturating_sub(2) { break; }
-            let model_info = &models[i];
-            let selected = i == app.model_dialog_model_idx;
-            let display = truncate_str(&model_info.name, frame.inner_w);
+            let row = &display_rows[scroll + vis];
 
-            if selected {
-                // Full row highlight: Primary bg, Background fg, Bold (OpenCode style)
-                for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                    buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
+            match row {
+                DisplayRow::Header(name) => {
+                    let prov_display = format!("  {}", name);
+                    buf.draw_str(inner_x, row_y, &truncate_str(&prov_display, inner_w),
+                        Style::new().fg(t.text_muted).bg(t.background).add_modifier(TextAttributes::bold()));
                 }
-                buf.draw_str(inner_x, row_y, display,
-                    Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
-            } else {
-                // Plain text — no markers, no ◆ (OpenCode style)
-                buf.draw_str(inner_x, row_y, display,
-                    Style::new().fg(t.text).bg(t.background));
+                DisplayRow::Model(model_idx) => {
+                    let selected = *model_idx == app.model_dialog_model_idx;
+                    let model_info = &models[*model_idx];
+                    let display = format!("  {}", truncate_str(&model_info.name, inner_w.saturating_sub(2) as usize));
+
+                    if selected {
+                        for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
+                            buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
+                        }
+                        buf.draw_str(inner_x, row_y, &display,
+                            Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
+                    } else {
+                        buf.draw_str(inner_x, row_y, &display,
+                            Style::new().fg(t.text).bg(t.background));
+                    }
+                }
             }
         }
     }
 
-    // Scroll indicators — bottom-right, Primary, Bold (exact copy of OpenCode getScrollIndicators)
     if has_indicators {
         let mut indicator = String::new();
-        if has_prov_left { indicator = "\u{2190} ".to_string() + &indicator; }
         if has_scroll_up { indicator.push_str("\u{2191} "); }
-        if has_scroll_down { indicator.push_str("\u{2193} "); }
-        if has_prov_right { indicator.push('\u{2192}'); }
+        if has_scroll_down { indicator.push_str("\u{2193}"); }
 
-        let iy = model_start_y + visible as u16;
+        let iy = model_start_y + visible.min(NUM_VISIBLE) as u16;
         let ix = frame.modal.right().saturating_sub(display_width(&indicator) + 2);
         buf.draw_str(ix, iy, &indicator,
             Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));

@@ -764,6 +764,8 @@ async def cmd_model(tui: SedimanTUI, args: str) -> None:
     tui.provider = provider
     tui.model = model
     tui._llm = None
+    from sediman.llm.provider import PROVIDERS
+    tui.base_url = PROVIDERS.get(provider, {}).get("base_url") or tui.base_url
     conv = tui._agent.get_conversation() if tui._agent else []
     tui._agent = None
 

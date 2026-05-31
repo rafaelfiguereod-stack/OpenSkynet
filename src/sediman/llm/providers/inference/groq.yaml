@@ -1,0 +1,28 @@
+name: groq
+display_name: Groq
+category: inference
+api_key_env: GROQ_API_KEY
+base_url: https://api.groq.com/openai/v1
+models:
+  default: openai/gpt-oss-120b
+  list:
+    - id: openai/gpt-oss-120b
+      name: GPT OSS 120B
+    - id: openai/gpt-oss-20b
+      name: GPT OSS 20B
+    - id: moonshotai/kimi-k2-instruct
+      name: Kimi K2 Instruct
+    - id: qwen/qwen3-32b
+      name: Qwen3 32B
+    - id: qwen-qwq-32b
+      name: Qwen QwQ 32B
+    - id: meta-llama/llama-4-maverick-17b-128e-instruct
+      name: Llama 4 Maverick
+    - id: meta-llama/llama-4-scout-17b-16e-instruct
+      name: Llama 4 Scout
+    - id: llama-3.3-70b-versatile
+      name: Llama 3.3 70B
+    - id: groq/compound
+      name: Compound
+    - id: groq/compound-mini
+      name: Compound Mini

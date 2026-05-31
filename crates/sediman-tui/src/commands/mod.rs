@@ -3,7 +3,8 @@ pub mod hub;
 pub mod memory;
 pub mod model;
 pub mod provider;
-pub mod connect;
+#[allow(dead_code)]
+pub mod integration;
 pub mod schedule;
 pub mod sessions;
 pub mod browser;
@@ -25,9 +26,8 @@ pub fn register_commands(registry: &mut CommandRegistry) {
     registry.register(&system::CMD_COMPRESS);
     registry.register(&system::CMD_STATUS);
     // Agent
-    registry.register(&model::CMD_MODEL);
+    registry.register(&model::CMD_MODELS);
     registry.register(&provider::CMD_PROVIDER);
-    registry.register(&connect::CMD_CONNECT);
     registry.register(&plan::CMD_PLAN);
     registry.register(&soul::CMD_SOUL);
     registry.register(&theming::CMD_THEMES);
@@ -59,7 +59,7 @@ mod tests {
         let mut registry = CommandRegistry::new();
         register_commands(&mut registry);
         let all = registry.all();
-        assert_eq!(all.len(), 23);
+        assert_eq!(all.len(), 22);
     }
 
     #[test]

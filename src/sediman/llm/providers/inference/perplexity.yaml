@@ -1,0 +1,16 @@
+name: perplexity
+display_name: Perplexity
+category: inference
+api_key_env: PERPLEXITY_API_KEY
+base_url: https://api.perplexity.ai
+models:
+  default: sonar-pro
+  list:
+    - id: sonar-pro
+      name: Sonar Pro
+    - id: sonar
+      name: Sonar
+    - id: sonar-reasoning-pro
+      name: Sonar Reasoning Pro
+    - id: sonar-deep-research
+      name: Sonar Deep Research
