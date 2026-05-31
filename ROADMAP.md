@@ -1,4 +1,4 @@
-# Sediman Roadmap
+# OpenSkynet Roadmap
 
 Features planned to close the gap with OpenCode / Claude Code and beyond.
 
@@ -134,7 +134,7 @@ These exist in the Python TUI but not yet in the Rust TUI:
 
 ### Granular Browser Tools
 
-Sediman currently uses BrowserUse as a monolithic black box. Exposing individual browser operations as tools gives the LLM finer control and reduces context waste.
+OpenSkynet currently uses BrowserUse as a monolithic black box. Exposing individual browser operations as tools gives the LLM finer control and reduces context waste.
 
 - [ ] **`browser_navigate`** — Go to URL
 - [ ] **`browser_snapshot`** — Accessibility tree snapshot with element ref IDs

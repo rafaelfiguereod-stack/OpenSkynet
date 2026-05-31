@@ -1,6 +1,6 @@
-# Contributing to Sediman
+# Contributing to OpenSkynet
 
-Thank you for your interest in contributing to Sediman! We appreciate every bug
+Thank you for your interest in contributing to OpenSkynet! We appreciate every bug
 report, feature idea, and pull request.
 
 ## Development Setup
@@ -8,8 +8,8 @@ report, feature idea, and pull request.
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/sediman-agent/sediman-browse.git
-   cd sediman-browse
+   git clone https://github.com/sediman-agent/OpenSkynet.git
+   cd OpenSkynet
    ```
 
 2. Install dependencies with [uv](https://docs.astral.sh/uv/):
@@ -109,5 +109,5 @@ Please add tests for any new functionality or bug fixes.
 
 ## License
 
-By contributing to Sediman, you agree that your contributions will be licensed
+By contributing to OpenSkynet, you agree that your contributions will be licensed
 under the Business Source License 1.1 (BSL-1.1) that covers this project.

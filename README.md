@@ -1,6 +1,6 @@
 <div align="center">
 
-# Sediman
+# OpenSkynet
 
 **Your AI browser employee that works while you sleep.**
 
@@ -10,7 +10,7 @@ Teach it once. It repeats forever. 24/7.
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-green.svg)]()
 [![Discord](https://img.shields.io/discord/1376637192334123070?color=5865F2&label=Discord&logo=discord&logoColor=white)](https://discord.gg/yFbZ58eJ)
 
-<a href="https://www.producthunt.com/products/sediman-agent?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-sediman-agent" target="_blank" rel="noopener noreferrer"><img alt="Sediman Agent - Teach it once. It repeats forever. AI browser automation. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1159366&amp;theme=light&amp;t=1780152148762"></a>
+<a href="https://www.producthunt.com/products/sediman-agent?embed=true&amp;utm_source=badge-featured&amp;utm_medium=badge&amp;utm_campaign=badge-sediman-agent" target="_blank" rel="noopener noreferrer"><img alt="OpenSkynet - Teach it once. It repeats forever. AI browser automation. | Product Hunt" width="250" height="54" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1159366&amp;theme=light&amp;t=1780152148762"></a>
 
 </div>
 
@@ -26,17 +26,17 @@ Teach it once. It repeats forever. 24/7.
 
 ```bash
 # Install the latest from main
-uv tool install git+https://github.com/sediman-agent/sediman-agent.git
+uv tool install git+https://github.com/sediman-agent/OpenSkynet.git
 
 # Or a specific branch/tag
-uv tool install git+https://github.com/sediman-agent/sediman-agent.git@feat/v1.0.3-hub-skill-browser
+uv tool install git+https://github.com/sediman-agent/OpenSkynet.git@feat/v1.0.3-hub-skill-browser
 ```
 
 ### From source
 
 ```bash
-git clone https://github.com/sediman-agent/sediman-agent.git
-cd sediman-agent
+git clone https://github.com/sediman-agent/OpenSkynet.git
+cd OpenSkynet
 uv tool install --force .
 
 # OR for development
@@ -79,7 +79,7 @@ OPENAI_API_KEY=sk-... bun run tui --provider openai --model gpt-4o
 
 ## What It Does
 
-| | Sediman | Browser Use | Scrapers | RPA Tools |
+| | OpenSkynet | Browser Use | Scrapers | RPA Tools |
 |---|---|---|---|---|
 | Real browser (Playwright/Chromium) | Yes | Yes | No | Yes |
 | AI-powered | Yes | Yes | No | No |
@@ -93,7 +93,7 @@ OPENAI_API_KEY=sk-... bun run tui --provider openai --model gpt-4o
 **Key features:**
 
 - **Learn by Showing** — watch your browser once, replay anytime
-- **Self-Healing** — pages change? Sediman patches itself automatically
+- **Self-Healing** — pages change? OpenSkynet patches itself automatically
 - **Self-Learning** — after each task, saves reusable skills automatically
 - **24/7 Scheduling** — cron-based automation, runs while you sleep
 - **Skills Hub** — browse and install 470+ community skills
@@ -113,6 +113,6 @@ OPENAI_API_KEY=sk-... bun run tui --provider openai --model gpt-4o
 
 **If this project helps you, consider giving it a star.**
 
-[Report Bug](https://github.com/sediman/sediman/issues) · [Request Feature](https://github.com/sediman/sediman/issues) · [Join Discord](https://discord.gg/yFbZ58eJ)
+[Report Bug](https://github.com/sediman-agent/OpenSkynet/issues) · [Request Feature](https://github.com/sediman-agent/OpenSkynet/issues) · [Join Discord](https://discord.gg/yFbZ58eJ)
 
 </div>
