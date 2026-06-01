@@ -120,6 +120,9 @@ async fn ensure_backend(
         .unwrap_or_else(default_install_root);
     eprintln!("  Backend root: {}", root.display());
 
+    let work_dir = std::env::current_dir().unwrap_or_else(|_| root.clone());
+    eprintln!("  Working dir: {}", work_dir.display());
+
     for (cmd, args) in &candidates {
         eprintln!("Starting backend: {} {}", cmd, args.join(" "));
 
@@ -128,9 +131,10 @@ async fn ensure_backend(
             .args(args)
             .env("SEDIMAN_PYTHON_SOCKET", socket_path)
             .env("SEDIMAN_PROVIDER", provider)
+            .env("SEDIMAN_ROOT", &root)
             .stdout(std::process::Stdio::null())
             .stderr(std::process::Stdio::piped())
-            .current_dir(&root);
+            .current_dir(&work_dir);
 
         if let Some(m) = model {
             child_cmd.env("SEDIMAN_MODEL", m);
