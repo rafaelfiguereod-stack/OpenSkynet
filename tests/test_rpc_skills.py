@@ -198,6 +198,18 @@ class TestHandleSkillsListAll:
             assert result[0]["installed"] is True
 
 
+class TestHubLocalIndex:
+    def test_local_index_path_exists(self):
+        from sediman.skills.hub import _LOCAL_INDEX_PATH
+        assert _LOCAL_INDEX_PATH.exists(), f"Local index not found at {_LOCAL_INDEX_PATH}"
+
+    def test_local_index_has_skills(self):
+        from sediman.skills.hub import HubClient
+        hub = HubClient()
+        local = hub._get_local_index()
+        assert len(local) > 0, "Local index should contain skills"
+
+
 class TestHandleSkillsSearchRegistered:
     def test_skills_search_in_handlers(self):
         from sediman.rpc_server import HANDLERS
