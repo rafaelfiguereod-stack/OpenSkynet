@@ -1,3 +1,4 @@
+use std::path::PathBuf;
 use std::panic;
 use std::time::Duration;
 use std::io::Write;
@@ -44,6 +45,22 @@ struct Args {
 
     #[arg(long)]
     gpu: bool,
+}
+
+fn find_project_root() -> Option<PathBuf> {
+    let mut dir = std::env::current_dir().ok()?;
+    loop {
+        if dir.join("pyproject.toml").exists() && dir.join("src/sediman/__init__.py").exists() {
+            return Some(dir);
+        }
+        if !dir.pop() { return None; }
+    }
+}
+
+fn default_install_root() -> PathBuf {
+    std::env::current_exe().ok()
+        .and_then(|p| p.parent().and_then(|p| p.parent().map(|p| p.to_path_buf())))
+        .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from(".")).join(".terminator"))
 }
 
 /// Auto-start the Python RPC backend if the socket doesn't exist yet.
@@ -97,9 +114,11 @@ async fn ensure_backend(
         .stdout(std::process::Stdio::null())
         .stderr(std::process::Stdio::piped());
 
-    if let Ok(root) = std::env::var("SEDIMAN_ROOT") {
-        child_cmd.current_dir(&root);
-    }
+    let root = std::env::var("SEDIMAN_ROOT").ok().map(PathBuf::from)
+        .or_else(find_project_root)
+        .unwrap_or_else(default_install_root);
+    eprintln!("  Backend root: {}", root.display());
+    child_cmd.current_dir(&root);
 
     if let Some(m) = model {
         child_cmd.env("SEDIMAN_MODEL", m);
