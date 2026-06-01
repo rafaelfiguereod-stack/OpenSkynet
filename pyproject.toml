@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "openskynet"
-version = "0.2.4"
+version = "0.2.5"
 description = "A self-improving browser agent that runs 24/7"
 readme = "README.md"
 license = {text = "BSL-1.1"}
@@ -73,6 +73,9 @@ Changelog = "https://github.com/sediman-agent/OpenSkynet/blob/main/docs/CHANGELO
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+sediman = ["**/*.yaml", "**/*.yml", "**/*.json", "**/*.txt", "**/*.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
