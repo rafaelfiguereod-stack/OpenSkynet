@@ -91,14 +91,16 @@ async fn ensure_backend(
         return None;
     }
 
-    // Candidate backends to try in order
+    // Candidate backends to try in order.
+    // Prefer `uv run` (local source) over the installed `sediman` binary
+    // so that development changes are picked up immediately.
     let candidates: Vec<(&str, Vec<&str>)> = {
         let mut c = Vec::new();
-        if which_exists("sediman").await {
-            c.push(("sediman", vec!["rpc-server"]));
-        }
         if which_exists("uv").await {
             c.push(("uv", vec!["run", "python", "-m", "sediman.rpc_server"]));
+        }
+        if which_exists("sediman").await {
+            c.push(("sediman", vec!["rpc-server"]));
         }
         if which_exists("python3").await {
             c.push(("python3", vec!["-m", "sediman.rpc_server"]));

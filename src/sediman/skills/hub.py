@@ -12,6 +12,7 @@ from typing import Any
 import httpx
 import structlog
 
+from sediman.config import DATA_DIR
 from sediman.skills.format import SkillData
 from sediman.skills.validator import validate_skill
 
@@ -19,14 +20,14 @@ logger = structlog.get_logger()
 
 DEFAULT_REGISTRY_URL = "https://raw.githubusercontent.com/sediman/skills-hub/main"
 
-_LOCAL_INDEX_PATH = Path(__file__).resolve().parent.parent.parent.parent / "skills" / "index.json"
+_LOCAL_INDEX_PATH = Path(__file__).resolve().parent.parent.parent.parent / "skills" / "data" / "index.json"
 
 _HUB_CACHE: list[dict[str, Any]] | None = None
 _CACHE_KEY: str = ""
 _CACHE_TS: float = 0.0
 _CACHE_TTL: float = 300.0
 
-_LOCK_FILE: Path = Path.home() / ".sediman" / "skills-lock.json"
+_LOCK_FILE: Path = DATA_DIR / "skills-lock.json"
 
 
 def _now_iso() -> str:

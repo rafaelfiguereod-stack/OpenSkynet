@@ -117,6 +117,99 @@ class TestHandleHubPublish:
             mock_publish.assert_called_once()
 
 
+class TestHandleSkillsListAll:
+    def test_list_all_in_handlers(self):
+        from sediman.rpc_server import HANDLERS
+
+        assert "skills.list_all" in HANDLERS
+
+    @pytest.mark.asyncio
+    async def test_list_all_returns_list(self):
+        from sediman.rpc_server import handle_skills_list_all
+
+        with patch("sediman.skills.engine.SkillEngine") as mock_engine_cls, \
+             patch("sediman.skills.hub.HubClient") as mock_hub_cls:
+            mock_engine = MagicMock()
+            mock_engine.list_skills.return_value = []
+            mock_engine_cls.return_value = mock_engine
+
+            mock_hub = MagicMock()
+            mock_hub.browse.return_value = []
+            mock_hub_cls.return_value = mock_hub
+
+            result = await handle_skills_list_all({})
+            assert isinstance(result, list)
+
+    @pytest.mark.asyncio
+    async def test_list_all_merges_installed_and_hub(self):
+        from sediman.rpc_server import handle_skills_list_all
+
+        with patch("sediman.skills.engine.SkillEngine") as mock_engine_cls, \
+             patch("sediman.skills.hub.HubClient") as mock_hub_cls:
+            mock_engine = MagicMock()
+            mock_engine.list_skills.return_value = [
+                {"name": "local-skill", "description": "d", "category": "c", "version": 1},
+            ]
+            mock_engine_cls.return_value = mock_engine
+
+            mock_skill = MagicMock()
+            mock_skill.name = "hub-skill"
+            mock_skill.description = "hd"
+            mock_skill.category = "hc"
+            mock_skill.version = 2
+            mock_skill.trust = "community"
+            mock_hub = MagicMock()
+            mock_hub.browse.return_value = [mock_skill]
+            mock_hub_cls.return_value = mock_hub
+
+            result = await handle_skills_list_all({})
+            assert len(result) == 2
+            by_name = {r["name"]: r for r in result}
+            assert by_name["local-skill"]["installed"] is True
+            assert by_name["local-skill"]["scope"] == "installed"
+            assert by_name["hub-skill"]["installed"] is False
+            assert by_name["hub-skill"]["scope"] == "external"
+
+    @pytest.mark.asyncio
+    async def test_list_all_deduplicates_installed_skill(self):
+        from sediman.rpc_server import handle_skills_list_all
+
+        with patch("sediman.skills.engine.SkillEngine") as mock_engine_cls, \
+             patch("sediman.skills.hub.HubClient") as mock_hub_cls:
+            mock_engine = MagicMock()
+            mock_engine.list_skills.return_value = [
+                {"name": "shared", "description": "d", "category": "c", "version": 1},
+            ]
+            mock_engine_cls.return_value = mock_engine
+
+            mock_skill = MagicMock()
+            mock_skill.name = "shared"
+            mock_skill.description = "hd"
+            mock_skill.category = "hc"
+            mock_skill.version = 2
+            mock_skill.trust = "community"
+            mock_hub = MagicMock()
+            mock_hub.browse.return_value = [mock_skill]
+            mock_hub_cls.return_value = mock_hub
+
+            result = await handle_skills_list_all({})
+            assert len(result) == 1
+            assert result[0]["name"] == "shared"
+            assert result[0]["installed"] is True
+
+
+class TestHubLocalIndex:
+    def test_local_index_path_exists(self):
+        from sediman.skills.hub import _LOCAL_INDEX_PATH
+        assert _LOCAL_INDEX_PATH.exists(), f"Local index not found at {_LOCAL_INDEX_PATH}"
+
+    def test_local_index_has_skills(self):
+        from sediman.skills.hub import HubClient
+        hub = HubClient()
+        local = hub._get_local_index()
+        assert len(local) > 0, "Local index should contain skills"
+
+
 class TestHandleSkillsSearchRegistered:
     def test_skills_search_in_handlers(self):
         from sediman.rpc_server import HANDLERS
@@ -127,3 +220,8 @@ class TestHandleSkillsSearchRegistered:
         from sediman.rpc_server import HANDLERS
 
         assert "hub.publish" in HANDLERS
+
+    def test_skills_list_all_in_handlers(self):
+        from sediman.rpc_server import HANDLERS
+
+        assert "skills.list_all" in HANDLERS
