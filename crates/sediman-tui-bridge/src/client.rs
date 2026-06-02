@@ -436,11 +436,15 @@ pub struct ModelInfo {
     pub provider: String,
 }
 
-#[derive(Debug, Clone, serde::Deserialize)]
+#[derive(Debug, Clone, Default, serde::Deserialize)]
 pub struct IntegrationInfo {
+    #[serde(default)]
     pub name: String,
+    #[serde(default)]
     pub configured: bool,
+    #[serde(default)]
     pub connected: bool,
+    #[serde(default)]
     pub enabled: bool,
 }
 
@@ -448,9 +452,15 @@ impl ApiClient {
     pub async fn list_integrations(&self) -> BridgeResult<Vec<IntegrationInfo>> {
         let wrapper: serde_json::Value = self.call("integration.list", serde_json::json!({})).await?;
         let integrations = wrapper.get("integrations").cloned().unwrap_or(wrapper);
-        let map: std::collections::HashMap<String, IntegrationInfo> =
-            serde_json::from_value(integrations).unwrap_or_default();
-        Ok(map.into_values().collect())
+        let mut result = Vec::new();
+        if let serde_json::Value::Object(map) = integrations {
+            for (key, value) in map {
+                let mut info: IntegrationInfo = serde_json::from_value(value).unwrap_or_default();
+                info.name = key;
+                result.push(info);
+            }
+        }
+        Ok(result)
     }
 
     pub async fn integration_status(&self, name: &str) -> BridgeResult<IntegrationInfo> {
@@ -506,5 +516,37 @@ mod tests {
             serde_json::from_str("invalid json");
         let err: BridgeError = result.unwrap_err().into();
         assert!(matches!(err, BridgeError::Json(_)));
+    }
+
+    #[test]
+    fn test_integration_info_deserialize() {
+        let raw = serde_json::json!({
+            "enabled": false,
+            "configured": false,
+            "channels": {},
+            "chats": {},
+            "connected": false
+        });
+        let info: IntegrationInfo = serde_json::from_value(raw).unwrap();
+        assert!(!info.configured);
+        assert!(!info.connected);
+        assert!(!info.enabled);
+        assert!(info.name.is_empty());
+    }
+
+    #[test]
+    fn test_integration_info_name_from_key() {
+        let raw = serde_json::json!({
+            "enabled": true,
+            "configured": true,
+            "channels": {},
+            "chats": {},
+            "connected": false
+        });
+        let mut info: IntegrationInfo = serde_json::from_value(raw).unwrap();
+        info.name = "discord".to_string();
+        assert_eq!(info.name, "discord");
+        assert!(info.configured);
+        assert!(info.enabled);
     }
 }
