@@ -9,16 +9,9 @@ from rich.console import Console
 
 from sediman import __version__
 
-_SPINNER_FRAMES = ("-", "\\", "|", "/")
-
 
 def cprint(text: str) -> None:
-    """Print text that scrolls above the prompt.
-
-    With patch_stdout active, print() goes through prompt_toolkit's
-    StdoutProxy which handles threading and scrolling automatically.
-    Falls back to bare print() if prompt_toolkit is unavailable.
-    """
+    """Print text to stdout. Used throughout the TUI layer for user output."""
     print(text)
 
 

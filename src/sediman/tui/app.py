@@ -22,6 +22,13 @@ from sediman.tui.logging import (
 )
 from sediman.tui.scheduler import SchedulerManager
 
+def _format_elapsed(seconds: float) -> str:
+    s = int(seconds)
+    if s < 60:
+        return f"{s}s"
+    return f"{s // 60}m {s % 60}s"
+
+
 _PERMISSION_MODES = ["ask", "acceptEdits", "plan", "auto"]
 
 
@@ -37,9 +44,7 @@ class _ProgressRenderable:
             lines.append("  Waiting for agent...")
         content = Text("\n".join(lines[-50:]))
         elapsed = time.monotonic() - self.tui._tool_start_time
-        elapsed_str = f"{elapsed:.0f}s"
-        if elapsed >= 60:
-            elapsed_str = f"{elapsed // 60:.0f}m {elapsed % 60:.0f}s"
+        elapsed_str = _format_elapsed(elapsed)
         panel = Panel(
             content,
             title=f"  ⏳ {elapsed_str}  {self.tui._spinner_text or 'Working...'}",
@@ -73,7 +78,6 @@ class SedimanTUI:
         self._tool_start_time: float = 0.0
         self._should_exit = False
         self._scheduler = SchedulerManager()
-        self._prompt_active = False
         self._session_name: str = ""
         self._session_color: str = ""
         self._session_start_time: float = 0.0
@@ -271,9 +275,7 @@ class SedimanTUI:
 
     def _print_exit_summary(self) -> None:
         elapsed = time.monotonic() - self._session_start_time
-        elapsed_str = f"{elapsed:.0f}s"
-        if elapsed >= 60:
-            elapsed_str = f"{elapsed // 60:.0f}m {elapsed % 60:.0f}s"
+        elapsed_str = _format_elapsed(elapsed)
         cprint(
             f"  \033[36m⏹ Session ended\033[0m · "
             f"{self._task_count} tasks · "
@@ -287,7 +289,7 @@ class SedimanTUI:
             import subprocess
 
             result = subprocess.run(
-                ["pgrep", "-f", "chromium.*--remote-debugging"],
+                ["pgrep", "-f", "-u", str(os.getuid()), "chromium.*--remote-debugging"],
                 capture_output=True,
                 text=True,
                 timeout=3,
@@ -322,10 +324,7 @@ class SedimanTUI:
         parts = []
 
         if self._agent_running:
-            elapsed = time.monotonic() - self._tool_start_time
-            elapsed_str = f"{elapsed:.0f}s"
-            if elapsed >= 60:
-                elapsed_str = f"{elapsed // 60:.0f}m {elapsed % 60:.0f}s"
+            elapsed_str = _format_elapsed(time.monotonic() - self._tool_start_time)
 
             spinner_text = self._spinner_text or "Working..."
             parts.append(f'<b><style fg="ansigreen">⏳ {elapsed_str}</style></b>')
@@ -406,7 +405,13 @@ class SedimanTUI:
             multiline=True,
         )
 
-        os.system("cls" if os.name == "nt" else "clear")
+        import sys
+
+        if os.name == "nt":
+            os.system("cls")
+        else:
+            sys.stdout.write("\033[2J\033[H")
+            sys.stdout.flush()
 
         print_banner(self.headless)
 
