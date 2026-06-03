@@ -24,6 +24,173 @@ logger = structlog.get_logger()
 MEDIA_CACHE_DIR = DATA_DIR / "media_cache"
 MEDIA_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
+# Default max file size (50 MB)
+DEFAULT_MAX_SIZE_MB = 50
+
+# Hard denylist for media delivery paths - even if recency-trusted
+_MEDIA_DELIVERY_DENIED_PREFIXES = (
+    "/etc",
+    "/proc",
+    "/sys",
+    "/dev",
+    "/root",
+    "/boot",
+    "/var/log",
+    "/var/lib",
+    "/var/run",
+)
+
+# Within $HOME we additionally deny common credential / config directories
+_MEDIA_DELIVERY_DENIED_HOME_SUBPATHS = (
+    ".ssh",
+    ".aws",
+    ".gnupg",
+    ".kube",
+    ".docker",
+    ".config",
+    ".azure",
+    ".gcloud",
+    "Library/Keychains",  # macOS
+)
+
+# Default recency window for trusting freshly-produced files (seconds)
+_MEDIA_DELIVERY_TRUST_RECENT_DEFAULT_SECONDS = 600
+
+
+def _path_under_denied_prefix(resolved_path: Path) -> bool:
+    """Return True if resolved path lives under a deny-listed system path.
+
+    Args:
+        resolved_path: Absolute resolved Path object
+
+    Returns:
+        True if path is under a denied prefix, False otherwise
+    """
+    for denied_prefix in _MEDIA_DELIVERY_DENIED_PREFIXES:
+        try:
+            denied = Path(denied_prefix).expanduser().resolve(strict=False)
+        except (OSError, RuntimeError):
+            continue
+        try:
+            resolved_path.relative_to(denied)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _path_under_denied_home_subpath(resolved_path: Path) -> bool:
+    """Return True if resolved path lives under a denied home subpath.
+
+    Args:
+        resolved_path: Absolute resolved Path object
+
+    Returns:
+        True if path is under a denied home subpath, False otherwise
+    """
+    home = Path.home()
+    for subpath in _MEDIA_DELIVERY_DENIED_HOME_SUBPATHS:
+        denied = home / subpath
+        try:
+            resolved_path.relative_to(denied)
+            return True
+        except ValueError:
+            continue
+    return False
+
+
+def _file_is_recently_produced(resolved_path: Path, window_seconds: float = 600.0) -> bool:
+    """Return True if the file's mtime is within window_seconds of now.
+
+    Args:
+        resolved_path: Absolute resolved Path object
+        window_seconds: Time window in seconds (default 600)
+
+    Returns:
+        True if file is recently produced, False otherwise
+    """
+    if window_seconds <= 0:
+        return False
+    try:
+        import time
+        mtime = resolved_path.stat().st_mtime
+        return (time.time() - mtime) <= window_seconds
+    except OSError:
+        return False
+
+
+def validate_media_delivery_path(
+    path: str,
+    allow_cache_dirs: bool = True,
+    trust_recent_seconds: float = _MEDIA_DELIVERY_TRUST_RECENT_DEFAULT_SECONDS,
+) -> Optional[str]:
+    """Return a safe absolute file path for native media delivery, else None.
+
+    Args:
+        path: File path to validate
+        allow_cache_dirs: Allow paths under cache directories
+        trust_recent_seconds: Trust files modified within this many seconds
+
+    Returns:
+        Absolute file path if safe, None otherwise
+
+    Security considerations:
+    - Denies paths under system directories (/etc, /proc, etc.)
+    - Denies paths under credential directories (~/.ssh, ~/.aws, etc.)
+    - Allows cache directories by default
+    - Optionally allows recently-produced files (to support generated content)
+    """
+    if not path:
+        return None
+
+    # Strip quotes and whitespace
+    candidate = str(path).strip()
+    if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in "`\"'":
+        candidate = candidate[1:-1].strip()
+    candidate = candidate.lstrip("`\"'").rstrip("`\"',.;:)}]")
+    if not candidate:
+        return None
+
+    try:
+        expanded = Path(os.path.expanduser(candidate))
+    except (OSError, RuntimeError, ValueError):
+        return None
+    if not expanded.is_absolute():
+        return None
+
+    try:
+        resolved = expanded.resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+    if not resolved.is_file():
+        return None
+
+    # Check system path denylist
+    if _path_under_denied_prefix(resolved):
+        return None
+
+    # Check home subpath denylist
+    if _path_under_denied_home_subpath(resolved):
+        return None
+
+    # Allow cache directories
+    if allow_cache_dirs:
+        for cache_dir in (MEDIA_CACHE_DIR,):
+            try:
+                resolved.relative_to(cache_dir)
+                return str(resolved)
+            except ValueError:
+                continue
+
+    # Trust recently-produced files
+    if trust_recent_seconds > 0:
+        if _file_is_recently_produced(resolved, trust_recent_seconds):
+            return str(resolved)
+
+    # Path failed all checks
+    return None
+
 # Try to import python-magic for MIME detection, fallback to simple detection
 try:
     import magic

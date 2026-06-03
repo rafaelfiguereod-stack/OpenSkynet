@@ -35,6 +35,7 @@ pub enum AppModal {
     ProviderPicker,
     ConnectPicker,
     ApiKeyPrompt,
+    #[allow(dead_code)]
     MemoryEditor,
     MemoryMenu {
         selected: usize,

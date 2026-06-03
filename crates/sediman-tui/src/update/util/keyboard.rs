@@ -8,6 +8,7 @@ use crossterm::event::{KeyCode, KeyModifiers};
 /// - `Ctrl+C` matches Ctrl+C
 /// - `Ctrl+K` matches Ctrl+K
 /// - `Shift+Enter` matches Shift+Enter
+#[allow(dead_code)]
 pub fn parse_key_combo(key: KeyCode, modifiers: KeyModifiers) -> String {
     let mut result = String::new();
 
