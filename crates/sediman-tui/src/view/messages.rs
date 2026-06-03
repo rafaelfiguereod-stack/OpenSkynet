@@ -131,8 +131,18 @@ pub fn render_messages(buf: &mut CellBuffer, area: Rect, app: &mut App) {
     }
 
     // ── Render lines from bottom up (chat-style) ──
+    // Scroll offset: 0 = newest at bottom, max_scroll = oldest at bottom
+    // To scroll up, we skip the OLDEST lines first (from start of lines)
+    let skip_from_start = if scroll > 0 {
+        // When scrolling up (showing older content), skip from oldest end
+        // The higher scroll_offset, the more we skip from the start
+        scroll.min(total_lines.saturating_sub(visible_height))
+    } else {
+        0
+    };
+
     let mut y = area.bottom().saturating_sub(1);
-    for line in lines.iter().rev().skip(scroll as usize) {
+    for line in lines.iter().skip(skip_from_start as usize).rev() {
         if y < area.y {
             break;
         }
