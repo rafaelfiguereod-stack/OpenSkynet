@@ -307,10 +307,38 @@ fn render_message(msg: &ChatMessage, lines: &mut Vec<MessageLine>, app: &App, ma
                             }
                         }
                         AgentTab::Response if has_response => {
-                            // Response is shown below, so we don't duplicate it here
+                            // Show response content
+                            let res = result.as_ref().unwrap();
+                            let icon = if *success { "✓" } else { "✗" };
+                            let color = if *success { app.theme.success } else { app.theme.error };
+                            let elapsed_str = format_elapsed(*elapsed_secs);
+
+                            // Show status line
+                            lines.push(MessageLine::text(
+                                format!("    {} Done · {}", icon, elapsed_str),
+                                Style::new().fg(color).add_modifier(TextAttributes::bold()),
+                            ));
+                            lines.push(MessageLine::text(
+                                format!("    ▸ {} · {}", app.provider, app.model.as_deref().unwrap_or("default")),
+                                Style::new().fg(app.theme.text_muted),
+                            ));
+
+                            if !res.is_empty() {
+                                lines.push(MessageLine::empty());
+                                // Render markdown result with proper padding
+                                let md_lines = markdown::render_markdown_with_theme(res, &app.theme);
+                                for md_line in &md_lines {
+                                    let (text, style) = flatten_line(md_line, app);
+                                    if !text.is_empty() {
+                                        push_wrapped(lines, &format!("    {}", text), style, max_width);
+                                    } else {
+                                        lines.push(MessageLine::empty());
+                                    }
+                                }
+                            }
                         }
                         _ => {
-                            // Tab not available
+                            // Tab not available or not selected
                             lines.push(MessageLine::text(
                                 "    (not available)",
                                 Style::new().fg(app.theme.text_muted),
@@ -328,48 +356,19 @@ fn render_message(msg: &ChatMessage, lines: &mut Vec<MessageLine>, app: &App, ma
                 lines.push(MessageLine::empty());
             }
 
-            // ── Result section ──
-            if let Some(res) = result {
+            // ── Skill/job info (shown regardless of tab selection) ──
+            if let Some(skill) = skill_created {
                 lines.push(MessageLine::empty());
-                let icon = if *success { "✓" } else { "✗" };
-                let color = if *success { app.theme.success } else { app.theme.error };
-                let elapsed_str = format_elapsed(*elapsed_secs);
                 lines.push(MessageLine::text(
-                    format!("  {} Done · {}", icon, elapsed_str),
-                    Style::new().fg(color).add_modifier(TextAttributes::bold()),
+                    format!("    ✦ Skill created: {}", skill),
+                    Style::new().fg(app.theme.info),
                 ));
+            }
+            if let Some(job) = scheduled_job {
                 lines.push(MessageLine::text(
-                    format!("    ▸ {} · {}", app.provider, app.model.as_deref().unwrap_or("default")),
-                    Style::new().fg(app.theme.text_muted),
+                    format!("    ⏰ Scheduled: {}", job),
+                    Style::new().fg(app.theme.secondary),
                 ));
-
-                if !res.is_empty() {
-                    lines.push(MessageLine::empty());
-                    // Render markdown result with proper padding
-                    let md_lines = markdown::render_markdown_with_theme(res, &app.theme);
-                    for md_line in &md_lines {
-                        let (text, style) = flatten_line(md_line, app);
-                        if !text.is_empty() {
-                            push_wrapped(lines, &format!("    {}", text), style, max_width);
-                        } else {
-                            lines.push(MessageLine::empty());
-                        }
-                    }
-                }
-
-                if let Some(skill) = skill_created {
-                    lines.push(MessageLine::empty());
-                    lines.push(MessageLine::text(
-                        format!("    ✦ Skill created: {}", skill),
-                        Style::new().fg(app.theme.info),
-                    ));
-                }
-                if let Some(job) = scheduled_job {
-                    lines.push(MessageLine::text(
-                        format!("    ⏰ Scheduled: {}", job),
-                        Style::new().fg(app.theme.secondary),
-                    ));
-                }
             }
         }
         ChatMessage::System { text, .. } => {

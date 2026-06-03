@@ -1118,9 +1118,8 @@ mod comprehensive_app_tests {
             SideTab::Skills,
             SideTab::Memory,
             SideTab::Schedule,
-            SideTab::Sessions,
         ];
-        assert_eq!(tabs.len(), 5);
+        assert_eq!(tabs.len(), 4);
     }
 
     #[test]
