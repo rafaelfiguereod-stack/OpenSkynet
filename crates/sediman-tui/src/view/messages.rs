@@ -131,21 +131,19 @@ pub fn render_messages(buf: &mut CellBuffer, area: Rect, app: &mut App) {
         }
     }
 
-    // ── Render lines from bottom up (chat-style) ──
+    // ── Render lines from bottom up (chat-style: newest at bottom) ──
     // Scroll offset: 0 = newest at bottom, max_scroll = oldest at bottom
-    // To scroll up (show older), we skip from start and take visible_height lines
+    // To scroll up (show older), we skip more lines from the start
     let skip_from_start = scroll.min(total_lines.saturating_sub(visible_height));
     let visible_count = visible_height.min(total_lines - skip_from_start);
 
-    // Collect the visible lines: skip oldest, then take visible_count newest of remaining
-    let visible_lines: Vec<_> = lines.iter()
-        .skip(skip_from_start as usize)
-        .rev()
-        .take(visible_count as usize)
-        .collect();
+    // Get the window of visible lines, then render from bottom up
+    // Take from END of lines (newest), skip from START (oldest)
+    let window_start = total_lines.saturating_sub(visible_count) - skip_from_start;
+    let window = lines.iter().skip(window_start as usize).take(visible_count as usize);
 
     let mut y = area.bottom().saturating_sub(1);
-    for line in visible_lines.iter().rev() {
+    for line in window.rev() {
         if y < area.y {
             break;
         }
