@@ -33,6 +33,10 @@ pub async fn handle_models(app: &mut App, args: &str) {
         if let Ok(models) = app.bridge.list_models(None).await {
             app.model_list = models;
         }
+
+        // Save to config
+        crate::commands::theming::save_config_now(&app);
+
         app.add_system_message(format!("Switched to {}", app.display_model_id()));
         return;
     }

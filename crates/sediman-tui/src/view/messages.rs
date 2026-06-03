@@ -414,6 +414,8 @@ pub fn format_elapsed(secs: u64) -> String {
         format!("{}h {:02}m", secs / 3600, (secs % 3600) / 60)
     } else if secs >= 60 {
         format!("{}m {:02}s", secs / 60, secs % 60)
+    } else if secs == 0 {
+        "< 1s".to_string()
     } else {
         format!("{}s", secs)
     }

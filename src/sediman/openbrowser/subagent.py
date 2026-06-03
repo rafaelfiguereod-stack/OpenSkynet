@@ -11,7 +11,7 @@ from sediman.types import BrowserResult
 
 logger = structlog.get_logger()
 
-_SYSTEM_PROMPT = """You are Sediman's browser agent using OpenBrowser — a headless semantic browser.
+_SYSTEM_PROMPT = """You are terminator's browser agent using OpenBrowser — a headless semantic browser.
 You interact with web pages through structured semantic trees and numbered element IDs.
 
 ## How it works

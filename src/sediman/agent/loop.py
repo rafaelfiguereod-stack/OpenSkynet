@@ -825,7 +825,7 @@ class AgentLoop:
             )
         except Exception:
             system_parts = [
-                "You are Sediman, an autonomous browser automation agent.",
+                "You are terminator, an autonomous browser automation agent.",
                 "Use browser tools to complete the task step by step.",
                 "Always start with browser_navigate, then browser_snapshot to see the page.",
                 "Use browser_click/browser_type to interact with elements by their ref_id.",

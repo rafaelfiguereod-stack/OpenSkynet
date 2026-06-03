@@ -3,7 +3,7 @@ use sediman_tui_core::command::{Command, CommandCategory};
 use crate::app::App;
 use crate::app::AppModal;
 
-const DEFAULT_SOUL: &str = "You are Sediman, a self-improving browser automation agent.
+const DEFAULT_SOUL: &str = "You are terminator, a self-improving browser automation agent.
 
 You are pragmatic, concise, and efficient. You complete browser tasks with minimal steps.
 
