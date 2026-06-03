@@ -4,10 +4,7 @@ Handles extended thinking formats like <think_tags>...</think_tags>
 that some models embed in their responses.
 """
 
-import structlog
 from typing import Callable
-
-logger = structlog.get_logger()
 
 # Think tag patterns - models may use various formats
 THINK_TAG_START_PATTERNS = [
@@ -96,14 +93,9 @@ class ThinkTagParser:
         for i in range(0, len(text), chunk_size):
             chunk = text[i:i + chunk_size]
             try:
-                logger.info(
-                    "streaming",
-                    content=content,
-                    phase=phase
-                )
                 self.on_streaming_text(chunk, phase)
             except Exception:
-                logger.debug("stream_chunk_failed")
+                pass
             if i > 0 and i % 18 == 0:
                 await asyncio.sleep(0)
 
@@ -125,13 +117,8 @@ class ThinkTagParser:
             'response': [],
         }
 
-        logger.info("parse_start", text=text[:100], phase=phase)
-
         # Process each character
-        for i, char in enumerate(text):
-            old_state = state['current']
-            old_buffer = state['buffer']
-
+        for char in text:
             handler = None
             if state['current'] == 'NORMAL':
                 handler = self._handle_normal_state
@@ -145,26 +132,6 @@ class ThinkTagParser:
             if handler:
                 handler(char, state)
 
-            # Log state transitions for debugging
-            if old_state != state['current'] or old_buffer != state['buffer']:
-                logger.info(
-                    "state_change",
-                    index=i,
-                    char=char,
-                    old_state=old_state,
-                    new_state=state['current'],
-                    buffer=state['buffer'],
-                    think_len=len(state['think']),
-                    response_len=len(state['response'])
-                )
-
-        logger.info(
-            "parse_complete",
-            think=''.join(state['think'])[:100],
-            response=''.join(state['response'])[:100]
-        )
-
         # Flush remaining content
-        
         await self._emit_content_chunks(state['response'], phase)
         await self._emit_content_chunks(state['think'], "thinking")
