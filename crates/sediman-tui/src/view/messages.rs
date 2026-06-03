@@ -110,15 +110,11 @@ pub fn render_messages(buf: &mut CellBuffer, area: Rect, app: &mut App) {
     let visible_height = area.height;
     let max_scroll = total_lines.saturating_sub(visible_height);
 
-    // Auto-scroll: show latest messages (scroll to bottom)
-    // But ONLY if we're already near the bottom, otherwise respect user's scroll position
+    // Auto-scroll: show latest messages (scroll to bottom of view)
+    // scroll_offset = 0 means show newest content at bottom
+    // scroll_offset = max_scroll means show oldest content at bottom
     if app.auto_scroll {
-        // Only reset scroll if we're close to the bottom (within 10% of content)
-        let scroll_threshold = max_scroll.saturating_sub(10).saturating_sub(max_scroll / 10);
-        if app.scroll_offset >= scroll_threshold || app.scroll_offset >= max_scroll.saturating_sub(5) {
-            app.scroll_offset = max_scroll;
-        }
-        // Once auto-scroll completes, disable it so manual scrolling works
+        app.scroll_offset = 0;
         app.auto_scroll = false;
     }
     let scroll = app.scroll_offset.min(max_scroll);

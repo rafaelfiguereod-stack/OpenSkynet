@@ -43,7 +43,7 @@ pub fn render_status_bar(buf: &mut CellBuffer, area: Rect, app: &App) {
 
     // Help indicator at right side
     let help_text = " ctrl+/ help ";
-    let help_x = area.right().saturating_sub(display_width(&help_text));
+    let help_x = area.right().saturating_sub(display_width(help_text));
     if help_x > x {
         buf.draw_str(help_x, y, help_text, Style::new()
             .bg(t.text_muted).fg(t.background_darker)
