@@ -47,6 +47,7 @@ from sediman.agent.progress import (
     generate_milestones_prompt,
     parse_milestones,
 )
+from sediman.agent.streaming import ThinkTagParser
 from sediman.browser.session import BrowserSession
 from sediman.llm.provider import LLMProvider
 from sediman.memory.strategy import BaseMemoryStrategy
@@ -56,6 +57,11 @@ from sediman.config import AGENT_STATE_FILE, MEMORY_SYSTEM
 logger = structlog.get_logger()
 
 import re as _re
+
+# Regex to strip <think>...</think> tags from LLM responses.
+# Capturing group (.*?) extracts inner content for fallback when
+# the entire response is wrapped in think tags.
+_STRIP_THINK_TAGS_RE = _re.compile(r"<think\b[^>]*>(.*?)</think\s*>", _re.DOTALL)
 
 _AGENT_STATE_FILE = AGENT_STATE_FILE
 
@@ -472,13 +478,21 @@ class AgentLoop:
                 response_text = plan.response
             if not _planning_streamed or not plan.response:
                 await self._stream_text_async(response_text, phase="responding")
+            # Strip <think>...</think> tags for conversation storage and result
+            # so the Response tab shows clean text and conversation history
+            # doesn't waste tokens on model reasoning tags.
+            clean_text = _STRIP_THINK_TAGS_RE.sub("", response_text).strip()
+            if not clean_text:
+                # Entire response was in think tags — use the inner content
+                think_parts = _STRIP_THINK_TAGS_RE.findall(response_text)
+                clean_text = " ".join(p.strip() for p in think_parts if p.strip()) if think_parts else response_text
             self._conversation.append({"role": "user", "content": task})
-            self._conversation.append({"role": "assistant", "content": response_text})
+            self._conversation.append({"role": "assistant", "content": clean_text})
             if len(self._conversation) > self.max_conversation:
                 self._conversation = self._conversation[-self.max_conversation:]
             return AgentResult(
                 task=task,
-                result=response_text,
+                result=clean_text,
                 strategy_used="conversational",
             )
 
@@ -1598,20 +1612,12 @@ class AgentLoop:
             logger.debug("stream_text_callback_failed")
 
     async def _stream_text_async(self, text: str, phase: str = "responding") -> None:
-        """Stream text token-by-token for smooth TUI rendering."""
-        import asyncio
-
+        """Stream text token-by-token for smooth TUI rendering with think tag parsing."""
         if not self.on_streaming_text or not text:
             return
-        chunk_size = 3
-        for i in range(0, len(text), chunk_size):
-            chunk = text[i:i + chunk_size]
-            try:
-                self.on_streaming_text(chunk, phase)
-            except Exception:
-                logger.debug("stream_text_async_callback_failed")
-            if i > 0 and i % 18 == 0:
-                await asyncio.sleep(0)
+
+        parser = ThinkTagParser(on_streaming_text=self.on_streaming_text)
+        await parser.parse_and_stream(text, phase)
 
     def _build_step_events(self, state: AgentState) -> list[StepEvent]:
         events = []
