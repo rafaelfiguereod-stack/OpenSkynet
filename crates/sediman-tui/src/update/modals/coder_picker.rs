@@ -1,6 +1,6 @@
 //! CoderPicker modal key handling.
 
-use crate::app::{App, AppModal};
+use crate::app::App;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 const CODER_BACKENDS: &[&str] = &["internal", "claude-code", "codex", "opencode"];

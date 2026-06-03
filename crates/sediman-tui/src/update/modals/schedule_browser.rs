@@ -1,6 +1,6 @@
 //! ScheduleBrowser modal key handling.
 
-use crate::app::{App, AppModal};
+use crate::app::App;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 /// Handle ScheduleBrowser modal key input.

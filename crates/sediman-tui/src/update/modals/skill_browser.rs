@@ -1,6 +1,6 @@
 //! SkillBrowser modal key handling.
 
-use crate::app::{App, AppModal};
+use crate::app::App;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 /// Handle SkillBrowser modal key input.

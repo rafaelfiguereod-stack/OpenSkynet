@@ -1,6 +1,6 @@
 use sediman_tui_core::command::{Command, CommandCategory};
 
-use crate::app::{App, AppModal, ModalLine};
+use crate::app::App;
 
 /// `/memory` — opens memory menu (view entries, switch system, view stats).
 pub async fn handle_memory(app: &mut App, _args: &str) {

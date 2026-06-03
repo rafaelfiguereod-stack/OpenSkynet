@@ -1,6 +1,6 @@
 //! ThemePicker modal key handling.
 
-use crate::app::{App, AppModal};
+use crate::app::App;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 /// Handle ThemePicker modal key input.

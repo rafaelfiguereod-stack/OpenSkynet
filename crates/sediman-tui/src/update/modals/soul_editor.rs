@@ -10,7 +10,7 @@ Communication style:
 - If something fails, explain what went wrong and what you tried
 - Proactively suggest improvements when you notice patterns";
 
-use crate::app::{App, AppModal};
+use crate::app::App;
 use crossterm::event::{KeyCode, KeyModifiers};
 
 /// Handle SoulEditor modal key input.

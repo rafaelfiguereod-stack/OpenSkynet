@@ -98,18 +98,21 @@ pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool
         }
     }
 
-    // Enter: submit (if not shift/ctrl modified)
+    // Enter: submit (if not shift/ctrl modified and no completion selected)
     if key.code == KeyCode::Enter {
         let has_modifier = key.modifiers.contains(KeyModifiers::SHIFT)
             || key.modifiers.contains(KeyModifiers::CONTROL);
         if has_modifier {
             app.editor.input(key);
+            return true;
         } else if let Some(cmd) = app.completer.selected_text() {
             app.editor.delete_line_by_head();
             app.editor.insert_str(cmd);
             app.completer.complete("");
+            return true;
         }
-        return true;
+        // Return false to allow submit logic to handle regular Enter
+        return false;
     }
 
     // Tab: completion or agent mode switch
