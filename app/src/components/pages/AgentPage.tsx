@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react';
-import { Send, Plus } from 'lucide-react';
+import { useEffect, useState, useRef } from 'react';
+import { Send, Plus, Sparkles } from 'lucide-react';
 import { useChatStore } from '@/stores/useChatStore';
-import { useAppStore } from '@/stores/useAppStore';
 import { getChatService } from '@/services/chatService';
 import { Button } from '@/components/shared/Button';
 import { Textarea } from '@/components/shared/Textarea';
@@ -21,33 +20,39 @@ export function AgentPage() {
 
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [inputHeight, setInputHeight] = useState(60);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    // Create a conversation if none exists
     if (conversations.length === 0) {
       const conversation = createConversation('New Chat');
       selectConversation(conversation.id);
     } else if (!activeConversationId && conversations.length > 0) {
-      // Select most recent conversation
       selectConversation(conversations[0].id);
     }
   }, [conversations, activeConversationId, createConversation, selectConversation]);
+
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [activeConversation?.messages]);
 
   const handleSend = async () => {
     if (!input.trim() || !activeConversationId || isStreaming) return;
 
     const userMessage = input.trim();
     setInput('');
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+    }
 
-    // Add user message
     addMessage(activeConversationId, {
       role: 'user',
       content: userMessage,
       status: 'done',
     });
 
-    // Create assistant message for streaming
     addMessage(activeConversationId, {
       role: 'assistant',
       content: '',
@@ -90,7 +95,7 @@ export function AgentPage() {
     }
   };
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
@@ -102,58 +107,87 @@ export function AgentPage() {
     selectConversation(conversation.id);
   };
 
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setInput(e.target.value);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const newHeight = Math.min(textareaRef.current.scrollHeight, 200);
+      textareaRef.current.style.height = `${newHeight}px`;
+    }
+  };
+
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-screen bg-white">
       {/* Header */}
-      <div className="h-14 border-b border-border flex items-center justify-between px-4">
-        <div>
-          <h2 className="text-lg font-semibold">Agent</h2>
-          <p className="text-xs text-muted-foreground">
-            {activeConversation?.title || 'New Chat'}
-          </p>
+      <div className="h-16 border-b border-gray-200 flex items-center justify-between px-6 bg-white/80 backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-black to-gray-800 flex items-center justify-center shadow-lg">
+            <Sparkles className="w-5 h-5 text-white" />
+          </div>
+          <div>
+            <h1 className="text-base font-semibold text-gray-900">OpenSkynet</h1>
+            <p className="text-xs text-gray-500">AI Agent</p>
+          </div>
         </div>
-        <Button variant="outline" size="sm" onClick={handleNewChat}>
-          <Plus className="h-4 w-4 mr-2" />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleNewChat}
+          className="shadow-sm hover:shadow-md transition-shadow"
+        >
+          <Plus className="w-4 h-4 mr-2" />
           New Chat
         </Button>
       </div>
 
       {/* Messages */}
-      <ScrollArea className="flex-1 p-4">
-        <div className="max-w-3xl mx-auto space-y-4">
+      <ScrollArea className="flex-1">
+        <div ref={scrollRef} className="max-w-3xl mx-auto py-8 px-6 space-y-6">
           {activeConversation?.messages.map((message) => (
             <MessageBubble key={message.id} message={message} />
           ))}
           {isStreaming && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <div className="typing-cursor" />
-              <span className="text-sm">Agent is thinking...</span>
+            <div className="flex items-center gap-2 text-gray-500 text-sm">
+              <div className="flex gap-1">
+                <span className="w-1 h-1 bg-black rounded-full animate-pulse" />
+                <span className="w-1 h-1 bg-black rounded-full animate-pulse" style={{ animationDelay: '0.2s' }} />
+                <span className="w-1 h-1 bg-black rounded-full animate-pulse" style={{ animationDelay: '0.4s' }} />
+              </div>
+              <span>OpenSkynet is thinking...</span>
             </div>
           )}
         </div>
       </ScrollArea>
 
       {/* Input */}
-      <div className="border-t border-border p-4">
+      <div className="border-t border-gray-200 bg-white p-6">
         <div className="max-w-3xl mx-auto">
-          <div className="flex items-end gap-2">
+          <div className="flex items-end gap-3">
             <Textarea
+              ref={textareaRef}
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                setInputHeight(Math.max(60, Math.min(200, e.target.scrollHeight)));
-              }}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
-              placeholder="Type your message... (Enter to send, Shift+Enter for new line)"
-              className="min-h-[60px] max-h-[200px] resize-none"
-              style={{ height: `${inputHeight}px` }}
+              placeholder="Message OpenSkynet..."
+              className="min-h-[56px] max-h-[200px] resize-none rounded-2xl border-gray-200 shadow-sm focus:ring-2 focus:ring-black/5 focus:border-gray-400 transition-all"
+              disabled={isStreaming}
             />
             <Button
               onClick={handleSend}
               disabled={!input.trim() || isStreaming}
-              className="h-[60px] px-4"
+              className="h-12 px-6 rounded-2xl bg-black text-white hover:bg-gray-800 shadow-lg hover:shadow-xl transition-all active:scale-105"
             >
-              <Send className="h-4 w-4" />
+              {isStreaming ? (
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-white/30 border-t-transparent rounded-full animate-spin" />
+                <span>Sending</span>
+                </div>
+              ) : (
+                <>
+                  <Send className="w-4 h-4" />
+                  <span className="hidden sm:inline">Send</span>
+                </>
+              )}
             </Button>
           </div>
         </div>

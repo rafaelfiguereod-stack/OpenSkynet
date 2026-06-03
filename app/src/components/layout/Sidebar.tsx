@@ -7,6 +7,7 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/useAppStore';
@@ -18,67 +19,87 @@ import { Button } from '@/components/shared/Button';
 export function Sidebar() {
   const sidebarOpen = useAppStore((state) => state.sidebarOpen);
   const setSidebarOpen = useAppStore((state) => state.setSidebarOpen);
-  const [isCollapsed, setIsCollapsed] = useState(false);
 
   return (
     <aside
       className={cn(
-        'fixed left-0 top-0 h-full bg-card border-r border-border flex flex-col z-50 transition-all duration-300',
+        'fixed left-0 top-0 h-full flex flex-col z-50',
+        'bg-white/95 backdrop-blur-xl',
+        'border-r border-gray-200/50',
+        'transition-all duration-300 ease-out',
         sidebarOpen ? 'w-64' : 'w-16'
       )}
     >
       {/* Header */}
-      <div className="h-14 flex items-center justify-between px-4 border-b border-border">
-        {sidebarOpen && (
-          <span className="text-lg font-semibold text-foreground">
-            Sediman
-          </span>
+      <div className="h-14 flex items-center justify-between px-4 border-b border-gray-200/50">
+        {sidebarOpen ? (
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-gray-900 to-black flex items-center justify-center shadow-lg">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-base font-semibold text-gray-900 tracking-tight">OpenSkynet</span>
+          </div>
+        ) : (
+          <div className="w-full flex justify-center">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-gray-900 to-black flex items-center justify-center shadow-lg">
+              <Sparkles className="w-4 h-4 text-white" />
+            </div>
+          </div>
         )}
         <Button
           variant="ghost"
           size="icon"
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="ml-auto"
+          className="h-8 w-8 shrink-0 hover:bg-gray-100 rounded-full transition-colors"
         >
           {sidebarOpen ? (
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="w-4 h-4 text-gray-600" />
           ) : (
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="w-4 h-4 text-gray-600" />
           )}
         </Button>
       </div>
 
-      {/* Navigation */}
+      {/* Content */}
       {sidebarOpen && (
         <>
-          <nav className="flex-1 overflow-y-auto py-4">
-            <SidebarNav />
-            <div className="my-4 border-t border-border" />
-            <SidebarAgent />
+          <nav className="flex-1 overflow-y-auto py-2">
+            {/* Navigation */}
+            <div className="px-3 py-2">
+              <SidebarNav />
+            </div>
+
+            {/* Divider */}
+            <div className="mx-3 my-2 h-px bg-gradient-to-r from-transparent via-gray-200/50 to-transparent" />
+
+            {/* Agent History */}
+            <div className="px-3 py-2">
+              <SidebarAgent />
+            </div>
           </nav>
 
           {/* Status */}
-          <div className="p-4 border-t border-border">
+          <div className="p-4 border-t border-gray-200/50">
             <SidebarStatus />
           </div>
         </>
       )}
 
-      {/* Collapsed: Icons only */}
+      {/* Collapsed state */}
       {!sidebarOpen && (
-        <nav className="flex-1 flex flex-col items-center py-4 gap-2">
-          <NavIcon icon={LayoutList} page="tasks" />
-          <NavIcon icon={Bot} page="agent" />
-          <NavIcon icon={Puzzle} page="skills" />
-          <NavIcon icon={FileText} page="logs" />
-          <NavIcon icon={Settings} page="settings" />
+        <nav className="flex-1 flex flex-col items-center py-2 gap-1">
+          <CollapsedNavItem icon={LayoutList} page="tasks" />
+          <CollapsedNavItem icon={Bot} page="agent" />
+          <CollapsedNavItem icon={Puzzle} page="skills" />
+          <CollapsedNavItem icon={FileText} page="logs" />
+          <CollapsedNavItem icon={Settings} page="settings" />
         </nav>
       )}
     </aside>
   );
 }
 
-function NavIcon({
+function CollapsedNavItem({
   icon: Icon,
   page,
 }: {
@@ -93,13 +114,15 @@ function NavIcon({
     <button
       onClick={() => setCurrentPage(page as any)}
       className={cn(
-        'w-10 h-10 rounded-lg flex items-center justify-center transition-colors',
+        'w-10 h-10 rounded-xl flex items-center justify-center transition-all duration-200',
+        'hover:bg-gray-100 active:scale-105',
         isActive
-          ? 'bg-accent text-accent-foreground'
-          : 'hover:bg-secondary text-muted-foreground hover:text-foreground'
+          ? 'bg-black text-white shadow-md'
+          : 'text-gray-600'
       )}
+      title={page.charAt(0).toUpperCase() + page.slice(1)}
     >
-      <Icon className="h-5 w-5" />
+      <Icon className="w-5 h-5" />
     </button>
   );
 }

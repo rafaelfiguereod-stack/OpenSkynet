@@ -10,9 +10,8 @@ import { SettingsPage } from '@/components/pages/SettingsPage';
 function App() {
   const currentPage = useAppStore((state) => state.currentPage);
 
-  // Initialize app
   useEffect(() => {
-    console.log('[Sediman] App initialized');
+    console.log('[OpenSkynet] App initialized');
   }, []);
 
   const renderPage = () => {
@@ -32,11 +31,7 @@ function App() {
     }
   };
 
-  return (
-    <AppLayout>
-      {renderPage()}
-    </AppLayout>
-  );
+  return <AppLayout>{renderPage()}</AppLayout>;
 }
 
 export default App;

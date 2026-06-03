@@ -40,38 +40,41 @@ export function SidebarAgent() {
   };
 
   return (
-    <div className="px-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-xs font-medium text-muted-foreground px-3">
-          Agent History
-        </div>
+    <div className="space-y-2">
+      {/* Header with New Chat button */}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+          Conversations
+        </span>
         <Button
           variant="ghost"
           size="icon"
-          className="h-6 w-6"
+          className="h-7 w-7"
           onClick={handleNewChat}
         >
-          <Plus className="h-3 w-3" />
+          <Plus className="h-3.5 w-3.5" />
         </Button>
       </div>
 
-      <ScrollArea className="h-64">
-        <nav className="space-y-1">
+      {/* Conversation list */}
+      <ScrollArea className="h-48">
+        <nav className="space-y-0.5">
           {conversations.map((conversation) => (
             <div
               key={conversation.id}
               className={cn(
-                'group flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors',
+                'group flex items-center gap-2 px-2 py-1.5 rounded-md text-sm',
+                'transition-all duration-150',
                 activeConversationId === conversation.id
                   ? 'bg-secondary text-foreground'
-                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                  : 'hover:bg-secondary hover:text-foreground text-muted-foreground'
               )}
             >
               <button
                 onClick={() => selectConversation(conversation.id)}
-                className="flex-1 text-left flex items-center gap-2"
+                className="flex-1 text-left flex items-center gap-2 min-w-0"
               >
-                <MessageSquare className="h-4 w-4 shrink-0" />
+                <MessageSquare className="h-3.5 w-3.5 shrink-0" />
                 {editingId === conversation.id ? (
                   <input
                     type="text"
@@ -81,7 +84,7 @@ export function SidebarAgent() {
                       if (e.key === 'Enter') handleSaveEdit(conversation.id);
                       if (e.key === 'Escape') handleCancelEdit();
                     }}
-                    className="flex-1 bg-background border border-input rounded px-1 py-0.5 text-xs"
+                    className="flex-1 bg-background border border-border rounded px-2 py-0.5 text-xs min-w-0"
                     autoFocus
                   />
                 ) : (
@@ -89,7 +92,7 @@ export function SidebarAgent() {
                 )}
               </button>
 
-              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1">
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0">
                 {editingId === conversation.id ? (
                   <>
                     <Button
@@ -124,7 +127,7 @@ export function SidebarAgent() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-5 w-5 text-destructive"
+                      className="h-5 w-5 text-destructive hover:text-destructive"
                       onClick={() => deleteConversation(conversation.id)}
                     >
                       <Trash2 className="h-3 w-3" />

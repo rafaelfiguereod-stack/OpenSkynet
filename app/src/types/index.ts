@@ -1,4 +1,4 @@
-// Global type definitions for Sediman Desktop
+// Global type definitions for OpenSkynet Desktop
 
 export interface Message {
   id: string;

@@ -15,32 +15,35 @@ export function SidebarNav() {
   const setCurrentPage = useAppStore((state) => state.setCurrentPage);
 
   return (
-    <div className="px-3">
-      <div className="text-xs font-medium text-muted-foreground px-3 mb-2">
-        Navigation
-      </div>
-      <nav className="space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = currentPage === item.id;
+    <div className="space-y-0.5">
+      {navItems.map((item) => {
+        const Icon = item.icon;
+        const isActive = currentPage === item.id;
 
-          return (
-            <button
-              key={item.id}
-              onClick={() => setCurrentPage(item.id)}
-              className={cn(
-                'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-accent text-accent-foreground'
-                  : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
-              )}
-            >
-              <Icon className="h-4 w-4" />
-              {item.label}
-            </button>
-          );
-        })}
-      </nav>
+        return (
+          <button
+            key={item.id}
+            onClick={() => setCurrentPage(item.id)}
+            className={cn(
+              'group w-full flex items-center gap-3 px-3 py-2.5 rounded-xl',
+              'text-sm font-medium transition-all duration-200',
+              isActive
+                ? 'bg-black text-white shadow-md scale-[1.02]'
+                : 'text-gray-700 hover:bg-gray-100'
+            )}
+          >
+            <div className={cn(
+              'w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-200',
+              isActive
+                ? 'bg-white/20'
+                : 'bg-gray-100 group-hover:bg-white'
+            )}>
+              <Icon className="w-4 h-4" />
+            </div>
+            <span>{item.label}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

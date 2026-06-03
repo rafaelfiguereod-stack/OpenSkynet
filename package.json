@@ -15,6 +15,14 @@
     "test": "cargo test -p sediman-tui && uv run pytest"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.11.2"
+    "@playwright/test": "^1.60.0",
+    "@tauri-apps/cli": "^2.11.2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
+    "@types/jest": "^30.0.0",
+    "jest": "^30.4.2",
+    "jest-environment-jsdom": "^30.4.1",
+    "vite-plugin-dts": "^5.0.2"
   }
 }
