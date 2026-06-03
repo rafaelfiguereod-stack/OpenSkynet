@@ -61,5 +61,3 @@ benchmarks/skill_generalization/skills/
 *.benchmark_results.jsonl
 *.benchmark_report.html
 
-# Tauri desktop app build artifacts
-app/

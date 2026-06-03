@@ -28,6 +28,7 @@ from sediman.memory.core.providers import BuiltinMemoryProvider, MemoryProvider
 from sediman.memory.utils.security import scan_content
 
 # Set up sys.modules redirects for moved modules to support old imports
+# Use lazy loading to avoid circular imports and hanging on startup
 _module_redirects = {
     "sediman.memory.store": "sediman.memory.storage.store",
     "sediman.memory.vector": "sediman.memory.vector.vector_store",
@@ -47,11 +48,32 @@ _module_redirects = {
     "sediman.memory.auto_memory": "sediman.memory.utils.auto_memory",
 }
 
-# Register redirects in sys.modules so old imports still work
+
+class _LazyRedirectModule:
+    """Lazy proxy for redirected modules to avoid circular imports."""
+
+    def __init__(self, target_path: str):
+        self._target_path = target_path
+        self._module = None
+
+    def _load(self):
+        if self._module is None:
+            self._module = _import_module(self._target_path)
+        return self._module
+
+    def __getattr__(self, name):
+        return getattr(self._load(), name)
+
+    def __dir__(self):
+        return dir(self._load())
+
+
+# Register lazy redirects in sys.modules so old imports still work
+# without eagerly importing all modules on startup
 for old_path, new_path in _module_redirects.items():
     if old_path not in _sys.modules:
         try:
-            _sys.modules[old_path] = _import_module(new_path)
+            _sys.modules[old_path] = _LazyRedirectModule(new_path)
         except (ImportError, AttributeError):
             pass
 
