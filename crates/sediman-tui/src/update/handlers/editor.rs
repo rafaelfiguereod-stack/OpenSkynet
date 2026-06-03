@@ -145,11 +145,11 @@ pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool
         return true;
     }
 
-    // Up: history up or completion up or scroll up
+    // Up: history up or scroll up
     if key.code == KeyCode::Up {
         let input = app.editor.lines().join(" ").trim().to_string();
-        // Priority: completion active → command completion → history → scroll
-        if input.starts_with('/') && !app.completer.filtered().is_empty() {
+        // Tab was just used: completion navigation
+        if app.completer.filtered().len() > 1 && input.starts_with('/') && input.len() > 1 {
             app.completer.up();
         } else if key.modifiers.contains(KeyModifiers::CONTROL) {
             // Ctrl+Up: command history up
@@ -164,11 +164,11 @@ pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool
         return true;
     }
 
-    // Down: history down or completion down or scroll down
+    // Down: history down or scroll down
     if key.code == KeyCode::Down {
         let input = app.editor.lines().join(" ").trim().to_string();
-        // Priority: completion active → command completion → history → scroll
-        if input.starts_with('/') && !app.completer.filtered().is_empty() {
+        // Tab was just used: completion navigation
+        if app.completer.filtered().len() > 1 && input.starts_with('/') && input.len() > 1 {
             app.completer.down();
         } else if key.modifiers.contains(KeyModifiers::CONTROL) {
             // Ctrl+Down: command history down

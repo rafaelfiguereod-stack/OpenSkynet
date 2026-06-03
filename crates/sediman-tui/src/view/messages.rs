@@ -410,17 +410,6 @@ pub fn format_elapsed(secs: u64) -> String {
     }
 }
 
-fn format_ago(duration: std::time::Duration) -> String {
-    let secs = duration.as_secs();
-    if secs < 60 {
-        format!("{}s ago", secs)
-    } else if secs < 3600 {
-        format!("{}m ago", secs / 60)
-    } else {
-        format!("{}h ago", secs / 3600)
-    }
-}
-
 fn parse_step_style(step: &str, app: &App) -> (Style, &'static str) {
     for info in PHASES {
         if step.contains(info.name) {
