@@ -1706,14 +1706,14 @@ pub fn render_onboarding_wizard(buf: &mut CellBuffer, area: Rect, app: &App, ste
             buf.draw_str(inner_x, y, "Pick your AI provider:",
                 Style::new().fg(t.text).bg(t.background));
 
-            let providers: Vec<String> = if app.available_providers.is_empty() {
-                vec!["openai".to_string(), "anthropic".to_string()]
-            } else {
-                app.available_providers.iter().map(|p| p.name.clone()).collect()
-            };
+            let providers: Vec<String> = app.available_providers.iter().map(|p| p.name.clone()).collect();
 
-            let visible = 8usize;
-            let start = app.provider_picker_scroll.min(providers.len().saturating_sub(visible));
+            if providers.is_empty() {
+                buf.draw_str(inner_x, y + 2, "  Connecting to backend...",
+                    Style::new().fg(t.text_muted).bg(t.background));
+            } else {
+                let visible = 8usize;
+                let start = app.provider_picker_scroll.min(providers.len().saturating_sub(visible));
             let end = (start + visible).min(providers.len());
 
             for (i, name) in providers[start..end].iter().enumerate() {
@@ -1742,6 +1742,7 @@ pub fn render_onboarding_wizard(buf: &mut CellBuffer, area: Rect, app: &App, ste
                 buf.draw_str(inner_x, hint_y, "\u{2191}\u{2193}: choose  |  Enter: confirm",
                     Style::new().fg(t.text_muted).bg(t.background));
             }
+            } // end else (providers loaded)
         }
         _ => {
             let y = frame.modal.y + 2;

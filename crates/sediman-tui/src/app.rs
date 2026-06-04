@@ -1138,6 +1138,12 @@ pub async fn run(
                         }
                     } else if !was_connected && app.is_connected {
                         app.reconnecting = false;
+                        // Populate providers on first successful backend connection
+                        if app.available_providers.is_empty() {
+                            if let Ok(providers) = app.bridge.list_providers().await {
+                                app.available_providers = providers;
+                            }
+                        }
                         if app.reconnecting {
                             app.add_system_message("Backend reconnected.".into());
                         } else {
@@ -1153,6 +1159,7 @@ pub async fn run(
     AnsiWriter::show_cursor(&mut stdout);
 
     // Save config on exit
+    let existing = crate::config::TuiConfig::load();
     let config = crate::config::TuiConfig {
         theme: app.theme_name.clone(),
         permission_mode: app.permission.current_label().to_string(),
@@ -1171,7 +1178,7 @@ pub async fn run(
         provider: app.provider.clone(),
         model: app.model.clone(),
         base_url: app.base_url.clone(),
-        onboarding_complete: true,
+        onboarding_complete: existing.onboarding_complete,
     };
     if let Err(e) = config.save() {
         warn!("{}", e);

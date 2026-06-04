@@ -1,5 +1,6 @@
 use crate::app::{App, AppModal};
 use crossterm::event::{KeyCode, KeyEvent};
+use tracing::warn;
 
 pub async fn handle_onboarding(app: &mut App, key: KeyEvent) -> bool {
     let step = if let Some(AppModal::OnboardingWizard { step }) = &app.active_modal {
@@ -71,5 +72,7 @@ fn save_onboarding_done(app: &App) {
     let mut config = crate::config::TuiConfig::load();
     config.onboarding_complete = true;
     config.provider = app.onboarding_provider.clone();
-    let _ = config.save();
+    if let Err(e) = config.save() {
+        warn!("Failed to save onboarding state: {}", e);
+    }
 }
