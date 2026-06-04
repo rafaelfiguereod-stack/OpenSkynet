@@ -1,6 +1,5 @@
-<img width="2816" height="1536" alt="Gemini_Generated_Image_g8qaaqg8qaaqg8qa" src="https://github.com/user-attachments/assets/d7cc4f18-85e9-43d3-ad9c-2ab2ffda9f43" />
-<div align="center">
 
+<div align="center">
 # OpenSkynet
 
 **Your AI Terminator**
