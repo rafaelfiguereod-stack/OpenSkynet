@@ -19,34 +19,43 @@ pub fn setup(verbose: bool) {
         .filename_prefix("tui")
         .filename_suffix("log")
         .max_log_files(7)
-        .build(&log_dir)
-        .expect("Failed to create log file appender");
+        .build(&log_dir);
 
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    match file_appender {
+        Ok(appender) => {
+            let (non_blocking, guard) = tracing_appender::non_blocking(appender);
+            let file_layer = tracing_subscriber::fmt::layer()
+                .with_writer(non_blocking)
+                .with_target(true)
+                .with_ansi(false)
+                .compact();
 
-    let file_layer = tracing_subscriber::fmt::layer()
-        .with_writer(non_blocking)
-        .with_target(true)
-        .with_ansi(false)
-        .compact();
+            let base = tracing_subscriber::registry().with(env_filter).with(file_layer);
 
-    if verbose {
-        let stderr_layer = tracing_subscriber::fmt::layer()
-            .with_writer(std::io::stderr)
-            .with_target(false)
-            .compact();
+            if verbose {
+                let stderr_layer = tracing_subscriber::fmt::layer()
+                    .with_writer(std::io::stderr)
+                    .with_target(false)
+                    .compact();
+                base.with(stderr_layer).init();
+            } else {
+                base.init();
+            }
 
-        tracing_subscriber::registry()
-            .with(env_filter)
-            .with(file_layer)
-            .with(stderr_layer)
-            .init();
-    } else {
-        tracing_subscriber::registry()
-            .with(env_filter)
-            .with(file_layer)
-            .init();
+            std::mem::forget(guard);
+        }
+        Err(e) => {
+            let path = log_dir.join("tui.log");
+            eprintln!(
+                "Warning: cannot create log file at {} ({}): logging to stderr only",
+                path.display(),
+                e
+            );
+            tracing_subscriber::fmt()
+                .with_env_filter(env_filter)
+                .with_target(verbose)
+                .compact()
+                .init();
+        }
     }
-
-    std::mem::forget(_guard);
 }

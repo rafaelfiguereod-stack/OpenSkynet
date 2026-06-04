@@ -2,6 +2,7 @@
 
 Modeled after opencode's auth system. File permissions are 0600 (user-only).
 """
+
 from __future__ import annotations
 
 import json
@@ -26,13 +27,30 @@ def _ensure_auth_file() -> Path:
     return AUTH_FILE
 
 
+def _backup_corrupted_auth() -> None:
+    """Rename the corrupted auth file so keys are recoverable from backup."""
+    import time
+    backup = AUTH_FILE.with_name(f"auth.json.corrupted.{int(time.time())}")
+    try:
+        AUTH_FILE.rename(backup)
+        logger.info("auth_store_backed_up", backup=str(backup))
+    except OSError as e:
+        logger.error("auth_store_backup_failed", error=str(e))
+
+
 def _read_store() -> dict[str, Any]:
     try:
         _ensure_auth_file()
         data = AUTH_FILE.read_text()
-        return json.loads(data) if data.strip() else {}
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning("auth_store_read_error", error=str(e))
+        if not data.strip():
+            return {}
+        return json.loads(data)
+    except json.JSONDecodeError:
+        logger.error("auth_store_corrupted", path=str(AUTH_FILE))
+        _backup_corrupted_auth()
+        return {}
+    except OSError as e:
+        logger.error("auth_store_read_error", path=str(AUTH_FILE), error=str(e))
         return {}
 
 

@@ -58,6 +58,10 @@ pub struct TuiConfig {
     /// Custom base URL for provider (if using custom endpoint)
     #[serde(default)]
     pub base_url: Option<String>,
+
+    /// Whether the first-run onboarding wizard has been completed
+    #[serde(default)]
+    pub onboarding_complete: bool,
 }
 
 fn default_theme() -> String { "default".into() }
@@ -84,6 +88,7 @@ impl Default for TuiConfig {
             provider: default_provider(),
             model: None,
             base_url: None,
+            onboarding_complete: false,
         }
     }
 }
@@ -153,6 +158,7 @@ mod tests {
             provider: "minimax".into(),
             model: Some("m3".into()),
             base_url: None,
+            onboarding_complete: true,
         };
         let toml_str = toml::to_string_pretty(&config).unwrap();
         let parsed: TuiConfig = toml::from_str(&toml_str).unwrap();

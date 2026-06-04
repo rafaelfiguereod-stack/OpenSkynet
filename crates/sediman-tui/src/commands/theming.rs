@@ -40,6 +40,7 @@ pub fn save_config_now(app: &App) {
         provider: app.provider.clone(),
         model: app.model.clone(),
         base_url: app.base_url.clone(),
+        onboarding_complete: true,
     };
     if let Err(e) = config.save() {
         warn!("{}", e);

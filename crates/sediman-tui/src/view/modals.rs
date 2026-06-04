@@ -1653,3 +1653,126 @@ pub fn render_update_available_modal(buf: &mut CellBuffer, area: Rect, app: &App
         buf.draw_str(inner_x, footer_y, &hint, Style::new().fg(t.text_muted).bg(t.background));
     }
 }
+
+pub fn render_onboarding_wizard(buf: &mut CellBuffer, area: Rect, app: &App, step: u8) {
+    let t = &app.theme;
+    let modal_w: u16 = 62;
+    let modal_h: u16 = 18;
+
+    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
+
+    let title = match step {
+        0 => " Welcome to OpenSkynet ",
+        1 => " Choose Provider ",
+        _ => " Enter API Key ",
+    };
+    frame.draw_title(buf, title, Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
+    frame.draw_close_hint(buf, " Esc close ", Style::new().fg(t.text_muted).bg(t.background));
+
+    let inner_x = frame.inner_x;
+    let inner_w = frame.inner_w;
+
+    match step {
+        0 => {
+            let y = frame.modal.y + 2;
+            buf.draw_str(inner_x, y, "AI browser employee \u{2014} browse, code, automate",
+                Style::new().fg(t.text).bg(t.background));
+
+            let lines = [
+                "",
+                "I can help you:",
+                "  \u{2022} Browse the web and extract information",
+                "  \u{2022} Write and run code in any language",
+                "  \u{2022} Deploy applications to production",
+                "  \u{2022} Automate repetitive tasks",
+                "  \u{2022} Create AI-powered skills",
+                "",
+                "You'll need an API key from OpenAI, Anthropic, or",
+                "another LLM provider. We'll set that up next.",
+            ];
+            for (i, line) in lines.iter().enumerate() {
+                buf.draw_str(inner_x, y + 2 + i as u16, line, Style::new().fg(t.text_muted).bg(t.background));
+            }
+
+            let btn_y = y + 14;
+            let btn_text = "  Press Enter to start setup  ";
+            let btn_style = Style::new().fg(t.background).bg(t.primary).add_modifier(TextAttributes::bold());
+            let btn_x = inner_x + (inner_w as u16).saturating_sub(btn_text.len() as u16) / 2;
+            buf.draw_str(btn_x, btn_y, btn_text, btn_style);
+        }
+        1 => {
+            let y = frame.modal.y + 2;
+            buf.draw_str(inner_x, y, "Pick your AI provider:",
+                Style::new().fg(t.text).bg(t.background));
+
+            let providers: Vec<String> = if app.available_providers.is_empty() {
+                vec!["openai".to_string(), "anthropic".to_string()]
+            } else {
+                app.available_providers.iter().map(|p| p.name.clone()).collect()
+            };
+
+            let visible = 8usize;
+            let start = app.provider_picker_scroll.min(providers.len().saturating_sub(visible));
+            let end = (start + visible).min(providers.len());
+
+            for (i, name) in providers[start..end].iter().enumerate() {
+                let idx = start + i;
+                let selected = idx == app.provider_picker_idx;
+                let row_y = y + 2 + i as u16;
+
+                let prefix = if selected { "\u{25b6} " } else { "  " };
+                let label = format!("{}{}", prefix, name);
+
+                let style = if selected {
+                    Style::new().fg(t.background).bg(t.primary).add_modifier(TextAttributes::bold())
+                } else {
+                    Style::new().fg(t.text).bg(t.background)
+                };
+                buf.draw_str(inner_x, row_y, &label, style);
+
+                if selected {
+                    let padding = " ".repeat(inner_w.saturating_sub(label.len()));
+                    buf.draw_str(inner_x + label.len() as u16, row_y, &padding, style);
+                }
+            }
+
+            let hint_y = y + 11;
+            if !providers.is_empty() {
+                buf.draw_str(inner_x, hint_y, "\u{2191}\u{2193}: choose  |  Enter: confirm",
+                    Style::new().fg(t.text_muted).bg(t.background));
+            }
+        }
+        _ => {
+            let y = frame.modal.y + 2;
+            buf.draw_str(inner_x, y, &format!("Provider: {}", app.onboarding_provider),
+                Style::new().fg(t.secondary).bg(t.background).add_modifier(TextAttributes::bold()));
+            buf.draw_str(inner_x, y + 2, "Enter your API key:",
+                Style::new().fg(t.text).bg(t.background));
+
+            let masked = if app.api_key_input.is_empty() {
+                "sk-...".to_string()
+            } else {
+                "\u{2022}".repeat(16)
+            };
+
+            let input_style = Style::new().fg(t.text).bg(t.background_panel);
+            let input_y = y + 4;
+            buf.draw_str(inner_x, input_y, "\u{276f} ", Style::new().fg(t.primary).bg(t.background_panel));
+            buf.draw_str(inner_x + 3, input_y, &masked, input_style);
+            let pad = " ".repeat(inner_w.saturating_sub(masked.len() + 3));
+            buf.draw_str(inner_x + masked.len() as u16 + 3, input_y, &pad, input_style);
+
+            buf.draw_str(inner_x, input_y + 3, "Type your key (input is hidden)  |  Enter: finish",
+                Style::new().fg(t.text_muted).bg(t.background));
+        }
+    }
+
+    let dots_y = frame.modal.bottom() - 1;
+    let dots_x = inner_x + (inner_w as u16).saturating_sub(7) / 2;
+    let step_dots: String = (0..=2u8).map(|s| {
+        if s == step { "\u{25c9}" } else { "\u{25cf}" }
+    }).collect();
+    let dots_str = format!("  {}", step_dots);
+    buf.draw_str(dots_x, dots_y, &dots_str, Style::new().fg(t.text_muted).bg(t.background));
+}

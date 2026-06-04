@@ -77,6 +77,9 @@ pub enum AppModal {
         installing: bool,
         install_progress: String,
     },
+    OnboardingWizard {
+        step: u8,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -232,6 +235,7 @@ pub struct App {
     pub provider_picker_idx: usize,
     pub provider_picker_scroll: usize,
     pub available_providers: Vec<sediman_tui_bridge::ProviderInfo>,
+    pub onboarding_provider: String,
     pub connect_target: Option<String>,
     pub connect_pending_model: Option<String>,
     pub api_key_input: String,
@@ -475,6 +479,7 @@ impl App {
             provider_picker_idx: 0,
             provider_picker_scroll: 0,
             available_providers: Vec::new(),
+            onboarding_provider: String::new(),
             connect_target: None,
             connect_pending_model: None,
             api_key_input: String::new(),
@@ -842,14 +847,24 @@ impl App {
     pub fn load_session(&mut self) -> bool {
         let session_path = crate::config::session_path();
         if session_path.exists() {
-            if let Ok(contents) = std::fs::read_to_string(&session_path) {
-                if let Ok(messages) = serde_json::from_str::<Vec<ChatMessage>>(&contents) {
-                    self.messages = messages;
-                    self.show_banner = false;
-                    self.scroll_offset = 0;
-                    self.auto_scroll = true;
-                    self.mark_dirty();
-                    return true;
+            match std::fs::read_to_string(&session_path) {
+                Ok(contents) => match serde_json::from_str::<Vec<ChatMessage>>(&contents) {
+                    Ok(messages) => {
+                        self.messages = messages;
+                        self.show_banner = false;
+                        self.scroll_offset = 0;
+                        self.auto_scroll = true;
+                        self.mark_dirty();
+                        return true;
+                    }
+                    Err(e) => {
+                        warn!("Session file corrupted: {}", e);
+                        self.show_toast(format!("Session file corrupted — starting fresh"));
+                    }
+                },
+                Err(e) => {
+                    warn!("Cannot read session file: {}", e);
+                    self.show_toast(format!("Cannot read session file — starting fresh"));
                 }
             }
         }
@@ -1090,6 +1105,14 @@ pub async fn run(
             }
             _ = tokio::time::sleep(Duration::from_millis(FRAME_INTERVAL_MS)) => {
                 tick_counter += 1;
+
+                if let Some(expiry) = app.toast_expiry {
+                    if Instant::now() >= expiry {
+                        app.toast_text.clear();
+                        app.toast_expiry = None;
+                    }
+                }
+
                 if app.agent_running && tick_counter.is_multiple_of(3) {
                     app.advance_spinner();
                 }
@@ -1145,6 +1168,7 @@ pub async fn run(
         provider: app.provider.clone(),
         model: app.model.clone(),
         base_url: app.base_url.clone(),
+        onboarding_complete: true,
     };
     if let Err(e) = config.save() {
         warn!("{}", e);

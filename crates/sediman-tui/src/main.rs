@@ -331,7 +331,15 @@ fn main() {
     let args = Args::parse();
 
     // Now enter the async runtime for the actual TUI
-    let runtime = tokio::runtime::Runtime::new().expect("Failed to create runtime");
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(rt) => rt,
+        Err(e) => {
+            eprintln!("Cannot start: async runtime creation failed: {}", e);
+            eprintln!("This usually means system resource limits are exhausted.");
+            eprintln!("Try: ulimit -n 65536");
+            std::process::exit(1);
+        }
+    };
     runtime.block_on(async_main(args));
 }
 
@@ -397,6 +405,10 @@ async fn async_main(args: Args) {
 
     // Apply saved config
     apply_saved_config(&mut app_state, &saved_config);
+
+    if !saved_config.onboarding_complete {
+        app_state.active_modal = Some(app::AppModal::OnboardingWizard { step: 0 });
+    }
 
     if args.resume {
         if app_state.load_session() {

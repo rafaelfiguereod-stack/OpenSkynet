@@ -39,7 +39,7 @@ impl ApiClient {
     }
 
     /// Send a JSON-RPC 2.0 request and deserialize the result.
-    pub(crate) async fn call<T: serde::de::DeserializeOwned>(
+    pub async fn call<T: serde::de::DeserializeOwned>(
         &self,
         method: &str,
         params: serde_json::Value,
@@ -419,6 +419,10 @@ impl ApiClient {
         )
         .await?;
         Ok(())
+    }
+
+    pub async fn auth_status(&self) -> BridgeResult<serde_json::Value> {
+        self.call("auth.status", serde_json::json!({})).await
     }
 }
 

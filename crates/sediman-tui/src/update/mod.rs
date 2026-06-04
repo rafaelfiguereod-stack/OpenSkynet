@@ -188,6 +188,7 @@ async fn handle_modal_key(app: &mut App, key: crossterm::event::KeyEvent, event_
         Some(AppModal::Help { .. }) => handle_help_modal(app, key).await,
         Some(AppModal::Info { .. }) => handle_info_modal(app, key).await,
         Some(AppModal::UpdateAvailable { .. }) => handle_update_available_modal(app, key, event_tx).await,
+        Some(AppModal::OnboardingWizard { .. }) => handle_onboarding(app, key).await,
         None => false,
     }
 }

@@ -64,6 +64,9 @@ pub fn render_into(buf: &mut CellBuffer, app: &mut App) {
             AppModal::UpdateAvailable { .. } => {
                 modals::render_update_available_modal(buf, zones.main, app);
             }
+            AppModal::OnboardingWizard { step } => {
+                modals::render_onboarding_wizard(buf, zones.main, app, *step);
+            }
         }
     }
 
