@@ -15,7 +15,13 @@ pub async fn handle_onboarding(app: &mut App, key: KeyEvent) -> bool {
             true
         }
         KeyCode::Enter if step == 0 => {
+            if app.available_providers.is_empty() {
+                if let Ok(providers) = app.bridge.list_providers().await {
+                    app.available_providers = providers;
+                }
+            }
             app.active_modal = Some(AppModal::OnboardingWizard { step: 1 });
+            app.mark_dirty();
             true
         }
         KeyCode::Enter if step == 1 => {
