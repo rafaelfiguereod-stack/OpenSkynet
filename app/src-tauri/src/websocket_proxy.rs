@@ -1,11 +1,8 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
-use std::env;
 use tokio::net::UnixStream;
 use futures_util::{StreamExt, SinkExt};
 use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 use tokio::net::TcpListener;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
 struct WebSocketProxy {
     socket_path: String,
@@ -34,7 +31,7 @@ impl WebSocketProxy {
 
         // Bidirectional proxy between WebSocket and Unix socket
         let (mut ws_sender, ws_receiver) = ws_stream.split();
-        let (mut unix_reader, mut unix_writer) = unix_stream.split();
+        let (unix_reader, mut unix_writer) = unix_stream.split();
 
         // Task to forward WebSocket messages to Unix socket
         let ws_to_unix = async {
@@ -43,11 +40,14 @@ impl WebSocketProxy {
                 match msg_result {
                     Ok(msg) => {
                         if msg.is_text() || msg.is_binary() {
-                            let data = msg.into_data();
+                            let mut data = msg.into_data();
+                            // Add newline for Python RPC server compatibility
+                            data.push(b'\n');
                             if let Err(e) = unix_writer.write_all(&data).await {
                                 eprintln!("Failed to write to Unix socket: {}", e);
                                 break;
                             }
+                            eprintln!("Sent {} bytes to Unix socket", data.len());
                         } else if msg.is_close() {
                             break;
                         }
@@ -62,16 +62,31 @@ impl WebSocketProxy {
 
         // Task to forward Unix socket responses to WebSocket
         let unix_to_ws = async {
-            let mut buffer = vec![0u8; 65536];
+            let mut reader = BufReader::new(unix_reader);
+            let mut line = String::new();
+
             loop {
-                match unix_reader.read(&mut buffer).await {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        let response_data = buffer[..n].to_vec();
-                        if let Err(e) = ws_sender.send(Message::binary(response_data)).await {
-                            eprintln!("Failed to send to WebSocket: {}", e);
-                            break;
+                eprintln!("Waiting for Unix socket data...");
+                match reader.read_line(&mut line).await {
+                    Ok(0) => {
+                        eprintln!("Unix socket EOF");
+                        break;
+                    }
+                    Ok(_) => {
+                        // Remove trailing newline and send
+                        if line.ends_with('\n') {
+                            line.pop();
                         }
+                        if !line.is_empty() {
+                            eprintln!("Read {} bytes from Unix socket", line.len());
+                            if let Err(e) = ws_sender.send(Message::text(line.clone())).await {
+                                eprintln!("Failed to send to WebSocket: {}", e);
+                                break;
+                            }
+                            eprintln!("Sent response to WebSocket");
+                        }
+                        // Clear the buffer for next read
+                        line.clear();
                     }
                     Err(e) => {
                         eprintln!("Failed to read from Unix socket: {}", e);

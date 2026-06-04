@@ -7,15 +7,15 @@ use crossterm::event::{KeyCode, KeyModifiers};
 pub async fn handle_doctor(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc | KeyCode::Char('q') => {
-            app.active_modal = None;
+            app.modals.active = None;
             true
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.active_modal = None;
+            app.modals.active = None;
             true
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if let Some(AppModal::Doctor { ref mut cursor, ref mut scroll, .. }) = app.active_modal {
+            if let Some(AppModal::Doctor { ref mut cursor, ref mut scroll, .. }) = app.modals.active {
                 if *cursor > 0 {
                     *cursor -= 1;
                     // Keep cursor visible: ensure scroll never exceeds cursor
@@ -27,7 +27,7 @@ pub async fn handle_doctor(app: &mut App, key: crossterm::event::KeyEvent) -> bo
             true
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if let Some(AppModal::Doctor { ref checks, ref mut cursor, ref mut scroll, .. }) = app.active_modal {
+            if let Some(AppModal::Doctor { ref checks, ref mut cursor, ref mut scroll, .. }) = app.modals.active {
                 if *cursor < checks.len().saturating_sub(1) {
                     *cursor += 1;
                     // Keep cursor visible: scroll when cursor reaches the bottom edge
@@ -44,7 +44,7 @@ pub async fn handle_doctor(app: &mut App, key: crossterm::event::KeyEvent) -> bo
         }
         KeyCode::Char('r') => {
             let checks = crate::commands::doctor::run_all_checks_sync(app).await;
-            app.active_modal = Some(AppModal::Doctor {
+            app.modals.active = Some(AppModal::Doctor {
                 checks,
                 cursor: 0,
                 scroll: 0,
@@ -54,7 +54,7 @@ pub async fn handle_doctor(app: &mut App, key: crossterm::event::KeyEvent) -> bo
             true
         }
         KeyCode::Enter => {
-            if let Some(AppModal::Doctor { ref checks, ref mut cursor, ref mut installing, ref mut install_output, .. }) = app.active_modal {
+            if let Some(AppModal::Doctor { ref checks, ref mut cursor, ref mut installing, ref mut install_output, .. }) = app.modals.active {
                 if let Some(cmd) = checks.get(*cursor).and_then(|c| c.install_cmd.clone()) {
                     *installing = true;
                     install_output.clear();
@@ -92,7 +92,7 @@ pub async fn handle_doctor(app: &mut App, key: crossterm::event::KeyEvent) -> bo
                     let saved_cursor = *cursor;
                     let saved_output = std::mem::take(install_output);
                     let new_checks = crate::commands::doctor::run_all_checks_sync(app).await;
-                    app.active_modal = Some(AppModal::Doctor {
+                    app.modals.active = Some(AppModal::Doctor {
                         checks: new_checks,
                         cursor: saved_cursor,
                         scroll: 0,

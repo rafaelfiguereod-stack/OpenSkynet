@@ -1,7 +1,8 @@
 use sediman_tui_core::command::{Command, CommandCategory};
-use sediman_tui_core::event::AppEvent;
+use sediman_tui_core::event::{AppEvent, AgentResultData, StreamingTokenData};
 
 use crate::app::App;
+use crate::error::try_send;
 
 pub async fn handle_terminator(app: &mut App, args: &str) {
     let task = args.trim();
@@ -12,13 +13,13 @@ pub async fn handle_terminator(app: &mut App, args: &str) {
     }
 
     app.show_banner = false;
-    app.agent_running = true;
-    app.agent_start = std::time::Instant::now();
-    app.spinner_text = "Terminator starting...".into();
+    app.agent.running = true;
+    app.agent.start = std::time::Instant::now();
+    app.agent.spinner_text = "Terminator starting...".into();
     app.interrupt.clear();
-    app.task_count += 1;
+    app.agent.task_count += 1;
 
-    app.add_user_message(task.to_string(), app.task_count);
+    app.add_user_message(task.to_string(), app.agent.task_count);
     app.start_agent_message(task);
 
     let bridge_url = app.bridge_url().to_string();
@@ -33,7 +34,7 @@ pub async fn handle_terminator(app: &mut App, args: &str) {
     let interrupt_flag = app.interrupt.flag().clone();
     let start = std::time::Instant::now();
 
-    let _ = tx.send(AppEvent::AgentStep("terminator".into(), "◆ Terminator mode activated".into()));
+    try_send(&tx, AppEvent::AgentStep("terminator".into(), "◆ Terminator mode activated".into()));
 
     tokio::spawn(async move {
         let result = run_terminator_stream(&bridge_url, &task_owned, &tx, &interrupt_flag).await;
@@ -41,15 +42,15 @@ pub async fn handle_terminator(app: &mut App, args: &str) {
 
         match result {
             Ok(Some(agent_result)) => {
-                let _ = tx.send(AppEvent::AgentResult(
-                    agent_result.success,
-                    agent_result.result.clone(),
-                    elapsed,
-                    None,
-                    None,
-                ));
+                try_send(&tx, AppEvent::AgentResult(AgentResultData {
+                    success: agent_result.success,
+                    text: agent_result.result.clone(),
+                    elapsed_secs: elapsed,
+                    skill_created: None,
+                    scheduled_job: None,
+                }));
                 let icon = if agent_result.success { "✓" } else { "✗" };
-                let _ = tx.send(AppEvent::CommandOutput(format!(
+                try_send(&tx, AppEvent::CommandOutput(format!(
                     "{} Terminator finished ({})",
                     icon,
                     if elapsed >= 60 {
@@ -60,20 +61,20 @@ pub async fn handle_terminator(app: &mut App, args: &str) {
                 )));
             }
             Ok(None) => {
-                let _ = tx.send(AppEvent::AgentError("No result received from Terminator.".into()));
+                try_send(&tx, AppEvent::AgentError("No result received from Terminator.".into()));
             }
             Err(e) => {
-                let _ = tx.send(AppEvent::AgentError(format!("Terminator error: {}", e)));
+                try_send(&tx, AppEvent::AgentError(format!("Terminator error: {}", e)));
             }
         }
-        let _ = tx.send(AppEvent::AgentDone);
+        try_send(&tx, AppEvent::AgentDone);
     });
 }
 
 async fn run_terminator_stream(
     bridge_url: &str,
     task: &str,
-    tx: &tokio::sync::mpsc::UnboundedSender<AppEvent>,
+    tx: &tokio::sync::mpsc::Sender<AppEvent>,
     interrupt_flag: &std::sync::Arc<std::sync::atomic::AtomicBool>,
 ) -> Result<Option<sediman_tui_bridge::AgentResult>, Box<dyn std::error::Error + Send + Sync>> {
     let params = serde_json::json!({"task": task});
@@ -96,7 +97,7 @@ async fn run_terminator_stream(
                         match ws_msg.msg_type.as_str() {
                             "streaming" => {
                                 if let Some(ref st) = ws_msg.streaming_token {
-                                    let _ = tx.send(AppEvent::StreamingToken(st.token.clone(), st.phase.clone()));
+                                    try_send(&tx, AppEvent::StreamingToken(StreamingTokenData { token: st.token.clone(), phase: st.phase.clone() }));
                                 }
                             }
                             "step" => {
@@ -107,7 +108,7 @@ async fn run_terminator_stream(
                                     if let Some(ref detail) = event.detail {
                                         step_line.push_str(&format!("\n  {}", detail));
                                     }
-                                    let _ = tx.send(AppEvent::AgentStep(phase, step_line));
+                                    try_send(&tx, AppEvent::AgentStep(phase, step_line));
                                 }
                             }
                             "result" => {

@@ -5,14 +5,14 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 /// Handle MemorySystemPicker modal key input.
 pub async fn handle_memory_system_picker(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
-    if let Some(AppModal::MemorySystemPicker { systems, selected }) = &mut app.active_modal {
+    if let Some(AppModal::MemorySystemPicker { systems, selected }) = &mut app.modals.active {
         match key.code {
             KeyCode::Esc => {
-                app.active_modal = None;
+                app.modals.active = None;
                 true
             }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                app.active_modal = None;
+                app.modals.active = None;
                 true
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -29,7 +29,7 @@ pub async fn handle_memory_system_picker(app: &mut App, key: crossterm::event::K
             }
             KeyCode::Enter => {
                 let selected_system = systems[*selected].clone();
-                app.active_modal = None;
+                app.modals.active = None;
 
                 // Extract system name from label (remove description)
                 let system_name = if selected_system.starts_with("file") {
@@ -41,7 +41,9 @@ pub async fn handle_memory_system_picker(app: &mut App, key: crossterm::event::K
                 };
 
                 // Trigger RPC call to switch system
-                let _ = app.bridge.memory_switch_system(system_name.clone()).await;
+                if let Err(e) = app.connection.bridge.memory_switch_system(system_name.clone()).await {
+                    tracing::warn!("Failed to switch memory system: {e}");
+                }
 
                 app.add_system_message(format!(
                     "Switched to memory system: {} (requires restart to take effect)",

@@ -9,32 +9,32 @@ const BROWSER_MODES: &[&str] = &["headless", "headed"];
 pub async fn handle_browser_mode_picker(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc => {
-            app.active_modal = None;
+            app.modals.active = None;
             true
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.active_modal = None;
+            app.modals.active = None;
             true
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if app.browser_mode_picker_selected > 0 {
-                app.browser_mode_picker_selected -= 1;
+            if app.modals.browser_mode_picker_selected > 0 {
+                app.modals.browser_mode_picker_selected -= 1;
             }
             true
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if app.browser_mode_picker_selected < BROWSER_MODES.len() - 1 {
-                app.browser_mode_picker_selected += 1;
+            if app.modals.browser_mode_picker_selected < BROWSER_MODES.len() - 1 {
+                app.modals.browser_mode_picker_selected += 1;
             }
             true
         }
         KeyCode::Enter => {
-            if let Some(mode) = BROWSER_MODES.get(app.browser_mode_picker_selected) {
+            if let Some(mode) = BROWSER_MODES.get(app.modals.browser_mode_picker_selected) {
                 let old_mode = if app.headless { "headless" } else { "headed" };
                 app.headless = *mode == "headless";
                 let new_mode = if app.headless { "headless" } else { "headed" };
                 if old_mode != new_mode {
-                    if let Err(e) = app.bridge.browser_configure(app.headless).await {
+                    if let Err(e) = app.connection.bridge.browser_configure(app.headless).await {
                         app.add_error_message(format!("Failed to configure browser: {}", e));
                     }
                     let config = crate::config::TuiConfig::load();
@@ -46,7 +46,7 @@ pub async fn handle_browser_mode_picker(app: &mut App, key: crossterm::event::Ke
                     app.add_system_message(format!("Browser mode: {} → {}", old_mode, new_mode));
                 }
             }
-            app.active_modal = None;
+            app.modals.active = None;
             true
         }
         _ => false,

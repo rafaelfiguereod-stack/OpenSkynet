@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 use sediman_tui_core::command::{Command, CommandCategory};
-use sediman_tui_core::event::AppEvent;
+use sediman_tui_core::event::{AppEvent, AgentResultData};
 
 use crate::app::{App, AppModal, ModalLine};
+use crate::error::try_send;
 
 pub async fn handle_skills(app: &mut App, args: &str) {
     let args = args.trim();
@@ -42,10 +43,10 @@ pub async fn handle_skills(app: &mut App, args: &str) {
 }
 
 async fn handle_skills_browse(app: &mut App) {
-    match app.bridge.list_all_skills().await {
+    match app.connection.bridge.list_all_skills().await {
         Ok(skills) => {
             if skills.is_empty() {
-                app.active_modal = Some(AppModal::Info {
+                app.modals.active = Some(AppModal::Info {
                     title: "Skills".into(),
                     lines: vec![
                         ModalLine::blank(),
@@ -56,22 +57,22 @@ async fn handle_skills_browse(app: &mut App) {
                 });
                 return;
             }
-            app.skill_browser_skills = skills;
-            app.skill_browser_selected = 0;
-            app.skill_browser_filter.clear();
-            app.skill_browser_scroll = 0;
-            app.skill_browser_installed = app
-                .skill_browser_skills
+            app.modals.skill_browser_skills = skills;
+            app.modals.skill_browser_selected = 0;
+            app.modals.skill_browser_filter.clear();
+            app.modals.skill_browser_scroll = 0;
+            app.modals.skill_browser_installed = app
+                .modals.skill_browser_skills
                 .iter()
                 .filter(|s| s.installed)
                 .map(|s| s.name.clone())
                 .collect();
-            app.active_modal = Some(AppModal::SkillBrowser);
+            app.modals.active = Some(AppModal::SkillBrowser);
         }
         Err(e) => {
             let err_str = e.to_string();
             if err_str.contains("Connection failed") || err_str.contains("No such file") || err_str.contains("os error 2") {
-                app.active_modal = Some(AppModal::Info {
+                app.modals.active = Some(AppModal::Info {
                     title: "Skills Unavailable".into(),
                     lines: vec![
                         ModalLine::blank(),
@@ -83,7 +84,7 @@ async fn handle_skills_browse(app: &mut App) {
                     scroll: 0,
                 });
             } else {
-                app.active_modal = Some(AppModal::Info {
+                app.modals.active = Some(AppModal::Info {
                     title: "Skills".into(),
                     lines: vec![
                         ModalLine::blank(),
@@ -98,7 +99,7 @@ async fn handle_skills_browse(app: &mut App) {
 
 async fn handle_skills_search(app: &mut App, query: &str) {
     if query.is_empty() {
-        app.active_modal = Some(AppModal::Info {
+        app.modals.active = Some(AppModal::Info {
             title: "Skills — Search".into(),
             lines: vec![
                 ModalLine::blank(),
@@ -108,10 +109,10 @@ async fn handle_skills_search(app: &mut App, query: &str) {
         });
         return;
     }
-    match app.bridge.search_skills(query, Some(20)).await {
+    match app.connection.bridge.search_skills(query, Some(20)).await {
         Ok(results) => {
             if results.is_empty() {
-                app.active_modal = Some(AppModal::Info {
+                app.modals.active = Some(AppModal::Info {
                     title: format!("Skills — Search: {}", query),
                     lines: vec![
                         ModalLine::blank(),
@@ -138,14 +139,14 @@ async fn handle_skills_search(app: &mut App, query: &str) {
                 lines.push(ModalLine::primary(format!("  {}", r.name)));
                 lines.push(ModalLine::muted(format!("    {} [{}]", r.description, meta)));
             }
-            app.active_modal = Some(AppModal::Info {
+            app.modals.active = Some(AppModal::Info {
                 title: format!("Skills — Search: {}", query),
                 lines,
                 scroll: 0,
             });
         }
         Err(e) => {
-            app.active_modal = Some(AppModal::Info {
+            app.modals.active = Some(AppModal::Info {
                 title: "Skills — Search".into(),
                 lines: vec![
                     ModalLine::blank(),
@@ -158,7 +159,7 @@ async fn handle_skills_search(app: &mut App, query: &str) {
 }
 
 pub async fn handle_skill_detail(app: &mut App, name: &str) {
-    match app.bridge.get_skill(name).await {
+    match app.connection.bridge.get_skill(name).await {
         Ok(skill) => {
             let mut lines = vec![
                 ModalLine::heading(format!("  {} v{}", skill.name, skill.version)),
@@ -196,14 +197,14 @@ pub async fn handle_skill_detail(app: &mut App, name: &str) {
                 lines.push(ModalLine::accent("  Verification"));
                 lines.push(ModalLine::normal(format!("    {}", v)));
             }
-            app.active_modal = Some(AppModal::Info {
+            app.modals.active = Some(AppModal::Info {
                 title: name.into(),
                 lines,
                 scroll: 0,
             });
         }
         Err(e) => {
-            app.active_modal = Some(AppModal::Info {
+            app.modals.active = Some(AppModal::Info {
                 title: name.into(),
                 lines: vec![
                     ModalLine::blank(),
@@ -220,7 +221,7 @@ pub async fn handle_run_skill(app: &mut App, args: &str) {
         app.add_system_message("Usage: /skills run <name>".into());
         return;
     }
-    if app.agent_running {
+    if app.agent.running {
         app.add_system_message("Agent is busy. Wait for it to finish.".into());
         return;
     }
@@ -230,8 +231,8 @@ pub async fn handle_run_skill(app: &mut App, args: &str) {
     };
 
     app.add_system_message(format!("Executing skill: {}", args));
-    app.agent_running = true;
-    app.agent_start = std::time::Instant::now();
+    app.agent.running = true;
+    app.agent.start = std::time::Instant::now();
     app.interrupt.clear();
     app.start_agent_message(&format!("skill: {}", args));
 
@@ -243,19 +244,19 @@ pub async fn handle_run_skill(app: &mut App, args: &str) {
         match result {
             Ok(agent_result) => {
                 let success = !agent_result.result.is_empty();
-                let _ = event_tx.send(AppEvent::AgentResult(
+                try_send(&event_tx, AppEvent::AgentResult(AgentResultData {
                     success,
-                    agent_result.result.clone(),
-                    agent_result.elapsed_secs,
-                    None,
-                    None,
-                ));
+                    text: agent_result.result.clone(),
+                    elapsed_secs: agent_result.elapsed_secs,
+                    skill_created: None,
+                    scheduled_job: None,
+                }));
             }
             Err(e) => {
-                let _ = event_tx.send(AppEvent::AgentError(format!("Skill failed: {}", e)));
+                try_send(&event_tx, AppEvent::AgentError(format!("Skill failed: {}", e)));
             }
         }
-        let _ = event_tx.send(AppEvent::AgentDone);
+        try_send(&event_tx, AppEvent::AgentDone);
     });
 }
 

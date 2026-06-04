@@ -3,13 +3,13 @@ use sediman_tui_core::command::{Command, CommandCategory};
 use crate::app::App;
 
 pub async fn handle_browser(app: &mut App, _args: &str) {
-    app.browser_mode_picker_selected = if app.headless { 0 } else { 1 };
-    app.active_modal = Some(crate::app::AppModal::BrowserModePicker);
+    app.modals.browser_mode_picker_selected = if app.headless { 0 } else { 1 };
+    app.modals.active = Some(crate::app::AppModal::BrowserModePicker);
 }
 
 #[allow(dead_code)]
 pub async fn handle_screenshot(app: &mut App, _args: &str) {
-    match app.bridge.get_screenshot().await {
+    match app.connection.bridge.get_screenshot().await {
         Ok(bytes) => {
             let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
             let path = format!("{}/.terminator/last_screenshot.png", home);

@@ -13,7 +13,7 @@ pub async fn handle_remember(app: &mut App, args: &str) {
         app.add_system_message("Usage: /remember <text>".into());
         return;
     }
-    match app.bridge.remember(args).await {
+    match app.connection.bridge.remember(args).await {
         Ok(_) => {
             let preview: String = args.chars().take(60).collect();
             app.add_system_message(format!("Remembered: {}", preview))

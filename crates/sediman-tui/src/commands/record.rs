@@ -9,7 +9,7 @@ pub async fn handle_record(app: &mut App, args: &str) {
         return;
     }
     let name = args.split_whitespace().next().unwrap_or("unnamed");
-    match app.bridge.start_recording(name).await {
+    match app.connection.bridge.start_recording(name).await {
         Ok(id) => {
             app.add_system_message(format!("Recording started: {} (id: {})", name, id));
             app.add_system_message("Perform the browser actions you want to record.".into());
@@ -20,7 +20,7 @@ pub async fn handle_record(app: &mut App, args: &str) {
 }
 
 pub async fn handle_stop(app: &mut App, _args: &str) {
-    match app.bridge.stop_recording("last").await {
+    match app.connection.bridge.stop_recording("last").await {
         Ok(()) => {
             app.add_system_message("Recording stopped. Converting to skill...".into());
             app.add_system_message("Skill created from recording.".into());

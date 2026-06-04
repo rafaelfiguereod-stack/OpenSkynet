@@ -2,7 +2,7 @@ import type { RPCRequest, RPCResponse, StreamEvent } from '@/types/rpc';
 
 type StreamHandler = (event: StreamEvent) => void;
 
-class RPCClient {
+export class RPCClient {
   private ws: WebSocket | null = null;
   private url: string;
   private reconnectAttempts = 0;
@@ -113,7 +113,8 @@ class RPCClient {
 
   async call<T = unknown>(
     method: string,
-    params?: unknown
+    params?: unknown,
+    timeout: number = 30000
   ): Promise<T> {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error('Not connected to RPC server');
@@ -141,13 +142,13 @@ class RPCClient {
 
       this.ws!.send(JSON.stringify(request));
 
-      // Timeout after 30 seconds
+      // Use custom timeout (default 30 seconds)
       setTimeout(() => {
         if (this.pendingRequests.has(id)) {
           this.pendingRequests.delete(id);
-          reject(new Error('RPC request timeout'));
+          reject(new Error(`RPC request timeout for ${method} after ${timeout}ms`));
         }
-      }, 30000);
+      }, timeout);
     });
   }
 
@@ -193,6 +194,17 @@ class RPCClient {
   isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
+
+  // Add diagnostic method
+  getDiagnostics() {
+    return {
+      url: this.url,
+      readyState: this.ws?.readyState,
+      readyStateText: this.ws ? ['CONNECTING', 'OPEN', 'CLOSING', 'CLOSED'][this.ws.readyState] : 'NO_WS',
+      pendingRequests: this.pendingRequests.size,
+      reconnectAttempts: this.reconnectAttempts,
+    };
+  }
 }
 
 // Singleton instance
@@ -203,6 +215,16 @@ export function getRPCClient(url?: string): RPCClient {
     rpcClient = new RPCClient(url);
   }
   return rpcClient;
+}
+
+// Global diagnostic function for browser console
+if (typeof window !== 'undefined') {
+  (window as any).rpcDiagnostics = () => {
+    if (!rpcClient) {
+      return { error: 'RPC client not initialized' };
+    }
+    return rpcClient.getDiagnostics();
+  };
 }
 
 export default RPCClient;

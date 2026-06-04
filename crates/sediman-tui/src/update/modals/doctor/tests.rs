@@ -24,7 +24,7 @@ mod tests {
             true,
             sediman_tui_bridge::ApiClient::new("/tmp/test.sock"),
         );
-        app.active_modal = Some(AppModal::Doctor {
+        app.modals.active = Some(AppModal::Doctor {
             checks,
             cursor,
             scroll,
@@ -54,7 +54,7 @@ mod tests {
             let event = create_key_event(KeyCode::Down);
             handle_doctor(&mut app, event).await;
 
-            if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.active_modal {
+            if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.modals.active {
                 let visible_start = *scroll as usize;
                 let visible_end = (visible_start + 12).min(20);
 
@@ -70,7 +70,7 @@ mod tests {
         }
 
         // After 15 Down presses, cursor should be at 15
-        if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.active_modal {
+        if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.modals.active {
             assert_eq!(*cursor, 15, "Cursor should be at position 15 after 15 Down presses");
             assert!(*scroll > 0, "Scroll should have incremented to keep cursor visible");
         }
@@ -86,7 +86,7 @@ mod tests {
             let event = create_key_event(KeyCode::Up);
             handle_doctor(&mut app, event).await;
 
-            if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.active_modal {
+            if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.modals.active {
                 let visible_start = *scroll as usize;
                 let visible_end = (visible_start + 12).min(20);
 
@@ -102,7 +102,7 @@ mod tests {
         }
 
         // After 15 Up presses, cursor should be at 4
-        if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.active_modal {
+        if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.modals.active {
             assert_eq!(*cursor, 4, "Cursor should be at position 4 after 15 Up presses");
             assert!(*scroll < 8, "Scroll should have decremented to keep cursor visible");
         }
@@ -117,7 +117,7 @@ mod tests {
         let event = create_key_event(KeyCode::Down);
         handle_doctor(&mut app, event).await;
 
-        if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.active_modal {
+        if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.modals.active {
             println!("After pressing Down: cursor={}, scroll={}", cursor, scroll);
             let visible_start = *scroll as usize;
             let visible_end = (visible_start + 12).min(20);
@@ -130,7 +130,7 @@ mod tests {
     async fn test_doctor_no_scroll_when_not_needed() {
         // Test that scroll doesn't change when cursor is in middle of visible area
         let mut app = create_test_app_with_doctor(20, 5, 0);
-        let initial_scroll = if let Some(AppModal::Doctor { ref scroll, .. }) = app.active_modal {
+        let initial_scroll = if let Some(AppModal::Doctor { ref scroll, .. }) = app.modals.active {
             *scroll
         } else {
             panic!("No doctor modal active");
@@ -140,7 +140,7 @@ mod tests {
         let event = create_key_event(KeyCode::Down);
         handle_doctor(&mut app, event).await;
 
-        if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.active_modal {
+        if let Some(AppModal::Doctor { ref cursor, ref scroll, .. }) = app.modals.active {
             assert_eq!(*cursor, 6, "Cursor should have moved");
             assert_eq!(*scroll, initial_scroll, "Scroll should not have changed");
         }

@@ -32,10 +32,11 @@ async def _handle_terminal(
     command = command.strip()
     timeout = max(1, min(timeout, 180))
 
-    from ..tools import _terminal_session_allowed, _terminal_approval_callback
-    if not _terminal_session_allowed:
-        if _terminal_approval_callback is not None:
-            approved = await _terminal_approval_callback(command, cwd or ".")
+    # Import the registry module to access the current values of global variables
+    from ..tools import registry
+    if not registry._terminal_session_allowed:
+        if registry._terminal_approval_callback is not None:
+            approved = await registry._terminal_approval_callback(command, cwd or ".")
             if not approved:
                 return ToolResult(
                     success=False,

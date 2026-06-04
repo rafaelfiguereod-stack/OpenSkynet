@@ -21,17 +21,17 @@ pub async fn handle_soul(app: &mut App, args: &str) {
     if args.is_empty() {
         // Load current personality from file, or use default
         let soul_text = load_current_soul();
-        app.soul_editor_input = soul_text;
-        app.active_modal = Some(AppModal::SoulEditor);
+        app.modals.soul_editor_input = soul_text;
+        app.modals.active = Some(AppModal::SoulEditor);
         return;
     }
     if args == "reset" {
-        match app.bridge.reset_soul().await {
+        match app.connection.bridge.reset_soul().await {
             Ok(()) => app.add_system_message("Personality reset to default.".into()),
             Err(e) => app.add_error_message(format!("Failed to reset personality: {}", e)),
         }
     } else {
-        match app.bridge.set_soul(args).await {
+        match app.connection.bridge.set_soul(args).await {
             Ok(()) => app.add_system_message("Personality set.".into()),
             Err(e) => app.add_error_message(format!("Failed to set personality: {}", e)),
         }

@@ -7,54 +7,54 @@ use crossterm::event::{KeyCode, KeyModifiers};
 pub async fn handle_connect_picker(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc | KeyCode::Char('q') => {
-            app.active_modal = None;
+            app.modals.active = None;
             true
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.active_modal = None;
+            app.modals.active = None;
             true
         }
         KeyCode::Up => {
-            if app.connect_picker_idx > 0 {
-                app.connect_picker_idx -= 1;
+            if app.modals.connect_picker_idx > 0 {
+                app.modals.connect_picker_idx -= 1;
             } else {
-                app.connect_picker_idx = app.connect_integration_list.len().saturating_sub(1);
+                app.modals.connect_picker_idx = app.modals.connect_integration_list.len().saturating_sub(1);
             }
-            if app.connect_picker_idx < app.connect_picker_scroll {
-                app.connect_picker_scroll = app.connect_picker_idx;
+            if app.modals.connect_picker_idx < app.modals.connect_picker_scroll {
+                app.modals.connect_picker_scroll = app.modals.connect_picker_idx;
             }
             true
         }
         KeyCode::Down => {
-            let max = app.connect_integration_list.len().saturating_sub(1);
-            if app.connect_picker_idx < max {
-                app.connect_picker_idx += 1;
+            let max = app.modals.connect_integration_list.len().saturating_sub(1);
+            if app.modals.connect_picker_idx < max {
+                app.modals.connect_picker_idx += 1;
             } else {
-                app.connect_picker_idx = 0;
-                app.connect_picker_scroll = 0;
+                app.modals.connect_picker_idx = 0;
+                app.modals.connect_picker_scroll = 0;
             }
             let visible = 10;
-            if app.connect_picker_idx >= app.connect_picker_scroll + visible {
-                app.connect_picker_scroll = app.connect_picker_idx - (visible - 1);
+            if app.modals.connect_picker_idx >= app.modals.connect_picker_scroll + visible {
+                app.modals.connect_picker_scroll = app.modals.connect_picker_idx - (visible - 1);
             }
             true
         }
         KeyCode::Enter => {
-            if let Some(integ) = app.connect_integration_list.get(app.connect_picker_idx).cloned() {
+            if let Some(integ) = app.modals.connect_integration_list.get(app.modals.connect_picker_idx).cloned() {
                 let name = integ.name.clone();
-                app.connect_target = Some(name);
-                app.connect_is_integration = true;
-                app.connect_pending_model = None;
-                app.api_key_input.clear();
-                app.active_modal = Some(AppModal::ApiKeyPrompt);
+                app.modals.connect_target = Some(name);
+                app.modals.connect_is_integration = true;
+                app.modals.connect_pending_model = None;
+                app.modals.api_key_input.clear();
+                app.modals.active = Some(AppModal::ApiKeyPrompt);
             }
             true
         }
         KeyCode::Char('d') => {
-            if let Some(integ) = app.connect_integration_list.get(app.connect_picker_idx).cloned() {
+            if let Some(integ) = app.modals.connect_integration_list.get(app.modals.connect_picker_idx).cloned() {
                 let name = integ.name.clone();
                 match app
-                    .bridge
+                    .connection.bridge
                     .configure_integration(&name, serde_json::json!({"enabled": false}))
                     .await
                 {
@@ -72,8 +72,8 @@ pub async fn handle_connect_picker(app: &mut App, key: crossterm::event::KeyEven
                         app.add_error_message(format!("Failed to disable {}: {}", name, e));
                     }
                 }
-                if let Ok(integrations) = app.bridge.list_integrations().await {
-                    app.connect_integration_list = integrations;
+                if let Ok(integrations) = app.connection.bridge.list_integrations().await {
+                    app.modals.connect_integration_list = integrations;
                 }
             }
             true

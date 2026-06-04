@@ -1,0 +1,112 @@
+"""Browser-related keywords in multiple languages.
+
+This module contains keywords for detecting browser automation intent
+across multiple languages.
+"""
+
+from __future__ import annotations
+
+# Browser action keywords
+BROWSER_KEYWORDS: tuple[str, ...] = (
+    "browse",
+    "browser",
+    "navigate",
+    "click",
+    "type",
+    "scroll",
+    "search",
+    "find",
+    "go to",
+    "open",
+    "visit",
+    "page",
+    "website",
+    "url",
+    "link",
+    "button",
+    "input",
+    "form",
+    "screenshot",
+    "navigate to",
+    "click on",
+    "type into",
+    "scroll down",
+    "scroll up",
+    # Spanish
+    "navegar",
+    "hacer clic",
+    "escribir",
+    "desplazarse",
+    "página",
+    "sitio web",
+    "enlace",
+    "botón",
+    "formulario",
+    # French
+    "naviguer",
+    "cliquer",
+    "taper",
+    "faire défiler",
+    "page",
+    "site web",
+    "lien",
+    "bouton",
+    "formulaire",
+    # German
+    "navigieren",
+    "klicken",
+    "tippen",
+    "scrollen",
+    "seite",
+    "webseite",
+    "link",
+    "button",
+    "formular",
+    # Chinese (Simplified)
+    "浏览",
+    "导航",
+    "点击",
+    "输入",
+    "滚动",
+    "页面",
+    "网站",
+    "链接",
+    "按钮",
+    "表单",
+    # Chinese (Traditional)
+    "瀏覽",
+    "導航",
+    "點擊",
+    "輸入",
+    "滾動",
+    # Japanese
+    "ブラウズ",
+    "ナビゲート",
+    "クリック",
+    "入力",
+    "スクロール",
+    "ページ",
+    "ウェブサイト",
+    "リンク",
+    # Korean
+    "브라우저",
+    "탐색",
+    "클릭",
+    "입력",
+    "스크롤",
+    "페이지",
+    "웹사이트",
+    "링크",
+    # Portuguese
+    "navegar",
+    "clicar",
+    "digitar",
+    "rolar",
+    "página",
+    "site",
+    "link",
+    "botão",
+    "formulário",
+)
+
+__all__ = ["BROWSER_KEYWORDS"]

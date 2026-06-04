@@ -3,6 +3,8 @@ import {
   ChevronRight,
   Sun,
   Moon,
+  Wifi,
+  WifiOff,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAppStore } from '@/stores/useAppStore';
@@ -16,6 +18,7 @@ export function Sidebar() {
   const setSidebarOpen = useAppStore((state) => state.setSidebarOpen);
   const theme = useAppStore((state) => state.theme);
   const toggleTheme = useAppStore((state) => state.toggleTheme);
+  const isConnected = useAppStore((state) => state.isConnected);
 
   return (
     <aside
@@ -28,10 +31,31 @@ export function Sidebar() {
       )}
     >
       {/* Header */}
-      <div className="h-10 flex items-center justify-between px-2 border-b border-border">
-        {sidebarOpen && (
-          <span className="text-sm font-medium text-foreground px-1">OpenSkynet</span>
-        )}
+      <div className="h-10 flex items-center justify-between px-3 border-b border-border">
+        <div className="flex items-center gap-2">
+          {sidebarOpen && (
+            <span className="text-sm font-medium text-foreground">OpenSkynet</span>
+          )}
+          {/* Connection Status Indicator */}
+          <div
+            className={cn(
+              "flex items-center gap-1 text-xs",
+              isConnected ? "text-green-500" : "text-red-500"
+            )}
+            title={isConnected ? "Backend connected" : "Backend disconnected"}
+          >
+            {isConnected ? (
+              <Wifi className="w-3 h-3" />
+            ) : (
+              <WifiOff className="w-3 h-3" />
+            )}
+            {sidebarOpen && (
+              <span className="text-[10px]">
+                {isConnected ? "Connected" : "Disconnected"}
+              </span>
+            )}
+          </div>
+        </div>
         <div className={cn('flex items-center gap-0', !sidebarOpen && 'mx-auto')}>
           <Button
             variant="ghost"
@@ -79,7 +103,7 @@ export function Sidebar() {
           </nav>
 
           {/* Status */}
-          <div className="p-2 border-t border-border">
+          <div className="flex items-center p-2 border-t border-border min-h-[38px]">
             <SidebarStatus />
           </div>
         </>

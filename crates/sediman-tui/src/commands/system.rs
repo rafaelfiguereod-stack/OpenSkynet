@@ -2,7 +2,7 @@ use crate::app::{App, AppModal, ModalLine};
 
 #[allow(dead_code)]
 pub async fn handle_help(app: &mut App, _args: &str) {
-    app.active_modal = Some(AppModal::Help { scroll: 0 });
+    app.modals.active = Some(AppModal::Help { scroll: 0 });
 }
 
 #[allow(dead_code)]
@@ -14,11 +14,11 @@ pub async fn handle_clear(app: &mut App, _args: &str) {
 #[allow(dead_code)]
 pub async fn handle_reset(app: &mut App, _args: &str) {
     app.messages.clear();
-    app.task_count = 0;
+    app.agent.task_count = 0;
     app.last_result = None;
     app.editor = sediman_tui_core::input::TextEditor::new();
     app.show_banner = true;
-    app.scroll_offset = 0;
+    app.scroll.offset = 0;
     app.add_system_message("Full reset done.".into());
 }
 
@@ -36,14 +36,14 @@ pub async fn handle_compress(app: &mut App, _args: &str) {
 
 #[allow(dead_code)]
 pub async fn handle_exit(app: &mut App, _args: &str) {
-    app.running = false;
+    app.agent.running = false;
 }
 
 #[allow(dead_code)]
 pub async fn handle_status(app: &mut App, _args: &str) {
     let mut lines = Vec::new();
 
-    match app.bridge.status().await {
+    match app.connection.bridge.status().await {
         Ok(status) => {
             let uptime = if status.uptime_secs >= 60 {
                 format!("{}m {}s", status.uptime_secs / 60, status.uptime_secs % 60)
@@ -65,11 +65,11 @@ pub async fn handle_status(app: &mut App, _args: &str) {
     lines.push(ModalLine::heading("Session"));
     lines.push(ModalLine::normal(format!("  Model      {}/{}", app.provider, app.model.as_deref().unwrap_or("-"))));
     lines.push(ModalLine::normal(format!("  Mode       {}", app.permission.current_label())));
-    lines.push(ModalLine::normal(format!("  Tasks      {}", app.task_count)));
+    lines.push(ModalLine::normal(format!("  Tasks      {}", app.agent.task_count)));
     lines.push(ModalLine::normal(format!("  Browser    {}", if app.headless { "headless" } else { "headed + vision" })));
     lines.push(ModalLine::normal(format!("  Theme      {}", app.theme_name)));
 
-    app.active_modal = Some(AppModal::Info {
+    app.modals.active = Some(AppModal::Info {
         title: "Status".into(),
         lines,
         scroll: 0,

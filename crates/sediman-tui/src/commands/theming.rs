@@ -14,11 +14,11 @@ pub static CMD_THEMES: Command = Command {
 pub async fn handle_themes(app: &mut App, _args: &str) {
     let names = styling::list_theme_names();
     let current_idx = names.iter().position(|n| n == &app.theme_name).unwrap_or(0);
-    app.theme_picker_saved_theme = app.theme.clone();
-    app.theme_picker_saved_name = app.theme_name.clone();
-    app.theme_picker_names = names;
-    app.theme_picker_selected = current_idx;
-    app.active_modal = Some(AppModal::ThemePicker);
+    app.modals.theme_picker_saved_theme = app.theme.clone();
+    app.modals.theme_picker_saved_name = app.theme_name.clone();
+    app.modals.theme_picker_names = names;
+    app.modals.theme_picker_selected = current_idx;
+    app.modals.active = Some(AppModal::ThemePicker);
 }
 
 pub fn save_config_now(app: &App) {
@@ -34,8 +34,8 @@ pub fn save_config_now(app: &App) {
             crate::app::SideTab::Status => "Status".into(),
         },
         headless: app.headless,
-        coder_backend: app.coder_backend.clone(),
-        search_mode: app.search_mode.clone(),
+        coder_backend: app.agent.coder_backend.clone(),
+        search_mode: app.agent.search_mode.clone(),
         update_frequency: crate::config::default_update_frequency(),
         last_update_check: None,
         provider: app.provider.clone(),

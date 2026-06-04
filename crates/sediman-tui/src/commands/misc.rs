@@ -6,16 +6,16 @@ use crate::app::{App, AppModal, ModalLine};
 pub async fn handle_usage(app: &mut App, _args: &str) {
     let conv_chars: usize = app.step_log.iter().map(|s| s.chars().count()).sum();
     let est_tokens = conv_chars / 4;
-    app.active_modal = Some(AppModal::Info {
+    app.modals.active = Some(AppModal::Info {
         title: "Usage".into(),
         lines: vec![
             ModalLine::heading("  Session Usage"),
             ModalLine::blank(),
-            ModalLine::normal(format!("  Tasks run     {}", app.task_count)),
+            ModalLine::normal(format!("  Tasks run     {}", app.agent.task_count)),
             ModalLine::normal(format!("  Est. tokens   ~{}", est_tokens)),
             ModalLine::normal(format!("  Messages      {}", app.messages.len())),
             ModalLine::normal(format!("  Model         {}", app.display_model_id())),
-            ModalLine::normal(format!("  Agent         {}", if app.agent_running { "running" } else { "idle" })),
+            ModalLine::normal(format!("  Agent         {}", if app.agent.running { "running" } else { "idle" })),
         ],
         scroll: 0,
     });
@@ -48,7 +48,9 @@ pub async fn handle_export(app: &mut App, _args: &str) {
 
     let home = std::env::var("HOME").unwrap_or_else(|_| ".".into());
     let dir = format!("{}/.terminator", home);
-    let _ = std::fs::create_dir_all(&dir);
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        tracing::warn!("Failed to create dir: {e}");
+    }
     let timestamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .unwrap_or_default()

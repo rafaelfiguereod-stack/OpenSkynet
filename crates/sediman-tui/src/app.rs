@@ -17,16 +17,12 @@ use sediman_tui_core::{
 };
 
 use crate::commands::register_commands;
+use crate::constants::*;
 use crate::permission::PermissionManager;
 use crate::interrupt::InterruptManager;
 use crate::update::handle_message;
 
 const SPINNER_FRAMES: &[char] = &['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
-
-const AGENT_STEPS_CAP: usize = 500;
-const FRAME_INTERVAL_MS: u64 = 33;
-const HEALTH_CHECK_INTERVAL_TICKS: u64 = 90;
-const STREAMING_MAX_BYTES: usize = 100_000;
 
 /// Modal overlay types — only one can be active at a time.
 #[derive(Clone, Debug)]
@@ -166,84 +162,49 @@ impl ModalLine {
     pub fn blank() -> Self { Self::new(String::new(), ModalLineStyle::Normal) }
 }
 
-#[allow(dead_code)]
-pub struct App {
-    pub provider: String,
-    pub model: Option<String>,
-    #[allow(dead_code)]
-    pub base_url: Option<String>,
-    pub headless: bool,
-    pub bridge: ApiClient,
-    pub theme: Theme,
-    pub theme_name: String,
-    pub layout: LayoutManager,
-    pub command_registry: CommandRegistry,
-    pub editor: TextEditor,
-    pub completer: Completer,
-    pub permission: PermissionManager,
-    pub interrupt: InterruptManager,
-    pub event_tx: Option<tokio::sync::mpsc::UnboundedSender<sediman_tui_core::event::AppEvent>>,
-    #[allow(clippy::type_complexity)]
-    pub backend_restart_fn: Option<Arc<dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>> + Send + Sync>>,
+// ── State sub-structs ──────────────────────────────────────────────
 
+pub struct ConnectionState {
+    pub bridge: ApiClient,
+    pub is_connected: bool,
+    pub reconnecting: bool,
+}
+
+pub struct AgentState {
     pub running: bool,
-    pub task_count: usize,
-    #[allow(dead_code)]
-    pub session_start: Instant,
-    pub session_name: Option<String>,
-    pub session_color: Option<String>,
-    pub agent_running: bool,
-    pub agent_start: Instant,
+    pub start: Instant,
     pub spinner_text: String,
     pub spinner_frame: usize,
-    pub last_result: Option<sediman_tui_bridge::AgentResult>,
-    pub show_banner: bool,
-    pub show_side_panel: bool,
-    pub side_panel_tab: SideTab,
+    pub mode: AgentMode,
+    pub modes: Vec<AgentModeEntry>,
+    pub current_mode_index: usize,
+    pub coder_backend: String,
+    pub search_mode: String,
     pub streaming_phase: String,
-    pub scroll_paused: bool,
-    pub thinking_expanded: bool,
-    pub steps_expanded: bool,
-
-    // Progress tracking for retry countdown, validation, etc.
+    pub task_count: usize,
     pub retry_attempt: Option<u32>,
     pub retry_max: Option<u32>,
     pub retry_countdown: Option<f32>,
     pub validation_confidence: Option<f32>,
     pub validation_issues: Option<usize>,
     pub reflection_status: bool,
+}
 
-    pub agent_mode: AgentMode,
-    pub agent_modes: Vec<AgentModeEntry>,
-    pub current_mode_index: usize,
-    pub coder_backend: String, // "internal", "claude-code", "codex", "opencode"
-    pub search_mode: String, // "auto", "simple", "advanced"
+pub struct CacheState {
+    pub skills: Vec<String>,
+    pub memory: Vec<String>,
+    pub schedule: Vec<String>,
+}
 
-    pub messages: Vec<ChatMessage>,
-    pub scroll_offset: u16,
-    pub auto_scroll: bool,
-    pub render_version: u64,
-    pub last_render_width: u16,
-    pub last_render_height: u16,
-    pub last_render_scroll: u16,
-
-    pub skills_cache: Vec<String>,
-    pub memory_cache: Vec<String>,
-    pub schedule_cache: Vec<String>,
-    pub is_connected: bool,
-    pub reconnecting: bool,
-    pub pending_resize: Option<(u16, u16)>,
-
-    // Modal system — only one active at a time
-    pub active_modal: Option<AppModal>,
-    // Unified model dialog state (OpenCode-style: ←/→ provider, ↑/↓ model)
+pub struct ModalState {
+    pub active: Option<AppModal>,
+    #[allow(dead_code)]
     pub model_dialog_provider_idx: usize,
     pub model_dialog_model_idx: usize,
     pub model_dialog_scroll: usize,
     pub model_dialog_filter: String,
     pub provider_picker_idx: usize,
     pub provider_picker_scroll: usize,
-    pub available_providers: Vec<sediman_tui_bridge::ProviderInfo>,
     pub onboarding_provider: String,
     pub connect_target: Option<String>,
     pub connect_pending_model: Option<String>,
@@ -253,47 +214,98 @@ pub struct App {
     pub connect_picker_idx: usize,
     pub connect_picker_scroll: usize,
     pub model_list: Vec<sediman_tui_bridge::ModelInfo>,
-    // Memory editor state
-    pub memory_entries: Vec<(String, String)>, // (target, content)
+    pub available_providers: Vec<sediman_tui_bridge::ProviderInfo>,
+    pub memory_entries: Vec<(String, String)>,
     pub memory_editor_input: String,
     pub memory_editor_index: usize,
-    // Soul editor state
     pub soul_editor_input: String,
-    // Skill browser state
     pub skill_browser_skills: Vec<sediman_tui_bridge::HubSkill>,
     pub skill_browser_selected: usize,
     pub skill_browser_filter: String,
     pub skill_browser_installed: Vec<String>,
     pub skill_browser_scroll: u16,
     pub skill_browser_filter_active: bool,
-    // Schedule browser state
     pub schedule_jobs: Vec<sediman_tui_bridge::CronJob>,
     pub schedule_selected: usize,
     pub schedule_scroll: u16,
     pub schedule_input: String,
-    // Theme picker state
     pub theme_picker_selected: usize,
     pub theme_picker_names: Vec<String>,
     pub theme_picker_saved_theme: Theme,
     pub theme_picker_saved_name: String,
-    // Coder picker state
     pub coder_picker_selected: usize,
-    // Search mode picker state
     pub search_mode_picker_selected: usize,
-    // Browser mode picker state
     pub browser_mode_picker_selected: usize,
-    // Session browser state
     pub session_list: Vec<sediman_tui_bridge::SessionInfo>,
     pub session_selected: usize,
     pub session_scroll: u16,
     pub session_filter: String,
+}
+
+pub struct ScrollState {
+    pub offset: u16,
+    pub auto_scroll: bool,
+    pub paused: bool,
+    pub thinking_expanded: bool,
+    pub steps_expanded: bool,
+}
+
+#[allow(dead_code)]
+pub struct App {
+    // Identity
+    pub provider: String,
+    pub model: Option<String>,
+    #[allow(dead_code)]
+    pub base_url: Option<String>,
+    pub headless: bool,
+
+    // Sub-systems
+    pub connection: ConnectionState,
+    pub agent: AgentState,
+    pub cache: CacheState,
+    pub modals: ModalState,
+    pub scroll: ScrollState,
+
+    // UI
+    pub theme: Theme,
+    pub theme_name: String,
+    pub layout: LayoutManager,
+    pub command_registry: CommandRegistry,
+    pub editor: TextEditor,
+    pub completer: Completer,
+    pub permission: PermissionManager,
+    pub interrupt: InterruptManager,
+    pub event_tx: Option<tokio::sync::mpsc::Sender<sediman_tui_core::event::AppEvent>>,
+    #[allow(clippy::type_complexity)]
+    pub backend_restart_fn: Option<Arc<dyn Fn() -> std::pin::Pin<Box<dyn std::future::Future<Output = bool> + Send>> + Send + Sync>>,
+
+    // Session
+    pub running: bool,
+    #[allow(dead_code)]
+    pub session_start: Instant,
+    pub session_name: Option<String>,
+    pub session_color: Option<String>,
+    pub show_banner: bool,
+    pub show_side_panel: bool,
+    pub side_panel_tab: SideTab,
+    pub side_panel_scroll: usize,
+
+    // Messages
+    pub messages: Vec<ChatMessage>,
+    pub render_version: u64,
+    pub theme_hash: u64,
+    pub last_render_width: u16,
+    pub last_render_height: u16,
+    pub last_render_scroll: u16,
+    pub last_result: Option<sediman_tui_bridge::AgentResult>,
+
+    // Toast
     pub toast_text: String,
     pub toast_expiry: Option<Instant>,
-    pub side_panel_scroll: usize,
+    pub pending_resize: Option<(u16, u16)>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub enum ChatMessage {
     User {
         text: String,
@@ -430,7 +442,92 @@ impl App {
             model,
             base_url,
             headless,
-            bridge,
+
+            connection: ConnectionState {
+                bridge,
+                is_connected: true,
+                reconnecting: false,
+            },
+
+            agent: AgentState {
+                running: false,
+                start: Instant::now(),
+                spinner_text: String::new(),
+                spinner_frame: 0,
+                mode: AgentMode::Manager,
+                modes: default_agent_modes(),
+                current_mode_index: 0,
+                coder_backend: "internal".into(),
+                search_mode: "auto".into(),
+                streaming_phase: String::new(),
+                task_count: 0,
+                retry_attempt: None,
+                retry_max: None,
+                retry_countdown: None,
+                validation_confidence: None,
+                validation_issues: None,
+                reflection_status: false,
+            },
+
+            cache: CacheState {
+                skills: Vec::new(),
+                memory: Vec::new(),
+                schedule: Vec::new(),
+            },
+
+            modals: ModalState {
+                active: None,
+                model_dialog_provider_idx: 0,
+                model_dialog_model_idx: 0,
+                model_dialog_scroll: 0,
+                model_dialog_filter: String::new(),
+                provider_picker_idx: 0,
+                provider_picker_scroll: 0,
+                onboarding_provider: String::new(),
+                connect_target: None,
+                connect_pending_model: None,
+                api_key_input: String::new(),
+                connect_is_integration: false,
+                connect_integration_list: Vec::new(),
+                connect_picker_idx: 0,
+                connect_picker_scroll: 0,
+                model_list: Vec::new(),
+                available_providers: Vec::new(),
+                memory_entries: Vec::new(),
+                memory_editor_input: String::new(),
+                memory_editor_index: 0,
+                soul_editor_input: String::new(),
+                skill_browser_skills: Vec::new(),
+                skill_browser_selected: 0,
+                skill_browser_filter: String::new(),
+                skill_browser_installed: Vec::new(),
+                skill_browser_scroll: 0,
+                skill_browser_filter_active: false,
+                schedule_jobs: Vec::new(),
+                schedule_selected: 0,
+                schedule_scroll: 0,
+                schedule_input: String::new(),
+                theme_picker_selected: 0,
+                theme_picker_names: Vec::new(),
+                theme_picker_saved_theme: Theme::default(),
+                theme_picker_saved_name: String::new(),
+                coder_picker_selected: 0,
+                search_mode_picker_selected: 0,
+                browser_mode_picker_selected: 0,
+                session_list: Vec::new(),
+                session_selected: 0,
+                session_scroll: 0,
+                session_filter: String::new(),
+            },
+
+            scroll: ScrollState {
+                offset: 0,
+                auto_scroll: true,
+                paused: false,
+                thinking_expanded: true,
+                steps_expanded: false,
+            },
+
             theme: Theme::default(),
             theme_name: "default".into(),
             layout,
@@ -443,128 +540,63 @@ impl App {
             backend_restart_fn: None,
 
             running: true,
-            task_count: 0,
             session_start: Instant::now(),
             session_name: None,
             session_color: None,
-            agent_running: false,
-            agent_start: Instant::now(),
-            spinner_text: String::new(),
-            spinner_frame: 0,
-            last_result: None,
             show_banner: true,
             show_side_panel: false,
             side_panel_tab: SideTab::Status,
-            streaming_phase: String::new(),
-            scroll_paused: false,
-            thinking_expanded: true,
-            steps_expanded: false,
-
-            agent_mode: AgentMode::Manager,
-            agent_modes: default_agent_modes(),
-            current_mode_index: 0,
-            coder_backend: "internal".into(),
-            search_mode: "auto".into(),
+            side_panel_scroll: 0,
 
             messages: Vec::new(),
-            scroll_offset: 0,
-            auto_scroll: true,
             render_version: 0,
+            theme_hash: 0,
             last_render_width: 0,
             last_render_height: 0,
             last_render_scroll: 0,
+            last_result: None,
 
-            skills_cache: Vec::new(),
-            memory_cache: Vec::new(),
-            schedule_cache: Vec::new(),
-            is_connected: true,
-            reconnecting: false,
-            pending_resize: None,
-
-            active_modal: None,
-            model_dialog_provider_idx: 0,
-            model_dialog_model_idx: 0,
-            model_dialog_scroll: 0,
-            model_dialog_filter: String::new(),
-            provider_picker_idx: 0,
-            provider_picker_scroll: 0,
-            available_providers: Vec::new(),
-            onboarding_provider: String::new(),
-            connect_target: None,
-            connect_pending_model: None,
-            api_key_input: String::new(),
-            connect_is_integration: false,
-            connect_integration_list: Vec::new(),
-            connect_picker_idx: 0,
-            connect_picker_scroll: 0,
-            model_list: Vec::new(),
-            memory_entries: Vec::new(),
-            memory_editor_input: String::new(),
-            memory_editor_index: 0,
-            soul_editor_input: String::new(),
-            skill_browser_skills: Vec::new(),
-            skill_browser_selected: 0,
-            skill_browser_filter: String::new(),
-            skill_browser_installed: Vec::new(),
-            skill_browser_scroll: 0,
-            skill_browser_filter_active: false,
-            schedule_jobs: Vec::new(),
-            schedule_selected: 0,
-            schedule_scroll: 0,
-            schedule_input: String::new(),
-            theme_picker_selected: 0,
-            theme_picker_names: Vec::new(),
-            theme_picker_saved_theme: Theme::default(),
-            theme_picker_saved_name: String::new(),
-            coder_picker_selected: 0,
-            search_mode_picker_selected: 0,
-            browser_mode_picker_selected: 0,
-            session_list: Vec::new(),
-            session_selected: 0,
-            session_scroll: 0,
-            session_filter: String::new(),
             toast_text: String::new(),
             toast_expiry: None,
-            side_panel_scroll: 0,
-
-            // Progress tracking fields
-            retry_attempt: None,
-            retry_max: None,
-            retry_countdown: None,
-            validation_confidence: None,
-            validation_issues: None,
-            reflection_status: false,
+            pending_resize: None,
         }
     }
 
     pub fn advance_spinner(&mut self) {
-        self.spinner_frame = (self.spinner_frame + 1) % SPINNER_FRAMES.len();
+        self.agent.spinner_frame = (self.agent.spinner_frame + 1) % SPINNER_FRAMES.len();
     }
 
     pub fn spinner_char(&self) -> char {
-        SPINNER_FRAMES[self.spinner_frame]
+        SPINNER_FRAMES[self.agent.spinner_frame]
     }
 
     pub fn show_toast(&mut self, text: String) {
         self.toast_text = text;
-        self.toast_expiry = Some(Instant::now() + Duration::from_secs(3));
+        self.toast_expiry = Some(Instant::now() + Duration::from_secs(TOAST_DURATION_SECS));
     }
 
     pub fn mark_dirty(&mut self) {
         self.render_version = self.render_version.wrapping_add(1);
     }
 
+    #[allow(dead_code)]
+    pub fn emit(&self, event: AppEvent) {
+        if let Some(tx) = &self.event_tx {
+            crate::error::try_send(tx, event);
+        }
+    }
+
     pub fn cycle_agent_mode(&mut self) {
-        if self.agent_modes.is_empty() {
+        if self.agent.modes.is_empty() {
             return;
         }
-        self.current_mode_index = (self.current_mode_index + 1) % self.agent_modes.len();
+        self.agent.current_mode_index = (self.agent.current_mode_index + 1) % self.agent.modes.len();
         self.sync_agent_mode();
     }
 
     pub fn sync_agent_mode(&mut self) {
-        if let Some(entry) = self.agent_modes.get(self.current_mode_index) {
-            self.agent_mode = match entry.mode.as_str() {
+        if let Some(entry) = self.agent.modes.get(self.agent.current_mode_index) {
+            self.agent.mode = match entry.mode.as_str() {
                 "browser" => AgentMode::Browser,
                 "coder" => AgentMode::Coder,
                 "terminator" => AgentMode::Terminator,
@@ -574,15 +606,15 @@ impl App {
     }
 
     pub fn current_mode_label(&self) -> &str {
-        self.agent_modes
-            .get(self.current_mode_index)
+        self.agent.modes
+            .get(self.agent.current_mode_index)
             .map(|e| e.label.as_str())
             .unwrap_or("Mgr")
     }
 
     pub fn current_mode_name(&self) -> &str {
-        self.agent_modes
-            .get(self.current_mode_index)
+        self.agent.modes
+            .get(self.agent.current_mode_index)
             .map(|e| e.mode.as_str())
             .unwrap_or("manager")
     }
@@ -590,17 +622,26 @@ impl App {
     #[allow(dead_code)]
     pub fn set_agent_modes(&mut self, modes: Vec<AgentModeEntry>) {
         let old_mode = self.current_mode_name().to_string();
-        self.agent_modes = if modes.is_empty() {
+        self.agent.modes = if modes.is_empty() {
             default_agent_modes()
         } else {
             modes
         };
-        let new_idx = self.agent_modes.iter().position(|e| e.mode == old_mode).unwrap_or(0);
-        self.current_mode_index = new_idx;
+        let new_idx = self.agent.modes.iter().position(|e| e.mode == old_mode).unwrap_or(0);
+        self.agent.current_mode_index = new_idx;
         self.sync_agent_mode();
     }
 
     pub fn invalidate_markdown_cache(&mut self) {
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+        let mut hasher = DefaultHasher::new();
+        format!("{:?}", self.theme).hash(&mut hasher);
+        let new_hash = hasher.finish();
+        if new_hash == self.theme_hash {
+            return;
+        }
+        self.theme_hash = new_hash;
         for msg in &mut self.messages {
             if let ChatMessage::Agent { cached_response_md, .. } = msg {
                 *cached_response_md = None;
@@ -610,27 +651,27 @@ impl App {
 
     pub fn add_system_message(&mut self, text: String) {
         self.messages.push(ChatMessage::System { text });
-        self.auto_scroll = true;
+        self.scroll.auto_scroll = true;
         self.mark_dirty();
     }
 
     pub fn add_user_message(&mut self, text: String, task_num: usize) {
         self.messages.push(ChatMessage::User { text, task_num });
-        self.auto_scroll = true;
+        self.scroll.auto_scroll = true;
         self.mark_dirty();
     }
 
     pub fn add_error_message(&mut self, text: String) {
         self.messages.push(ChatMessage::Error { text });
-        self.auto_scroll = true;
+        self.scroll.auto_scroll = true;
         self.mark_dirty();
     }
 
     pub fn start_agent_message(&mut self, _task: &str) {
-        self.streaming_phase.clear();
-        self.scroll_paused = false;
-        self.thinking_expanded = true;
-        self.steps_expanded = false;
+        self.agent.streaming_phase.clear();
+        self.scroll.paused = false;
+        self.scroll.thinking_expanded = true;
+        self.scroll.steps_expanded = false;
 
         // Collapse all previous Agent messages so old step data
         // doesn't appear in the scroll view for the new task.
@@ -653,7 +694,7 @@ impl App {
             tab_expanded: false,
             cached_response_md: None,
         });
-        self.auto_scroll = true;
+        self.scroll.auto_scroll = true;
         self.mark_dirty();
     }
 
@@ -670,7 +711,7 @@ impl App {
                 *tab_expanded = true;
             }
         }
-        self.auto_scroll = true;
+        self.scroll.auto_scroll = true;
         self.mark_dirty();
     }
 
@@ -698,9 +739,9 @@ impl App {
             *cached_response_md = md_lines;
             *state = MessageState::Completed;
         }
-        self.agent_running = false;
-        self.streaming_phase.clear();
-        self.auto_scroll = true;
+        self.agent.running = false;
+        self.agent.streaming_phase.clear();
+        self.scroll.auto_scroll = true;
         self.mark_dirty();
         self.save_session();
     }
@@ -734,7 +775,7 @@ impl App {
 
     pub fn append_streaming_token(&mut self, token: &str, phase: &str) {
         if !phase.is_empty() {
-            self.streaming_phase = phase.to_string();
+            self.agent.streaming_phase = phase.to_string();
         }
 
         let phase_lower = phase.to_lowercase();
@@ -751,47 +792,45 @@ impl App {
             }
         }
 
-        self.auto_scroll = true;
+        self.scroll.auto_scroll = true;
         self.mark_dirty();
     }
 
     /// Update progress data (retry countdown, validation status, etc.)
     pub fn update_progress(&mut self, progress: &sediman_tui_core::event::ProgressData) {
-        match progress.progress_type.as_str() {
-            "retry" => {
-                self.retry_attempt = progress.current_attempt;
-                self.retry_max = progress.max_attempts;
-                self.retry_countdown = progress.countdown_seconds;
-                self.streaming_phase = "retrying".to_string();
+        match progress.kind {
+            sediman_tui_core::event::ProgressKind::Retry => {
+                self.agent.retry_attempt = progress.current_attempt;
+                self.agent.retry_max = progress.max_attempts;
+                self.agent.retry_countdown = progress.countdown_seconds;
+                self.agent.streaming_phase = "retrying".to_string();
             }
-            "validation" => {
-                self.validation_confidence = progress.confidence;
-                self.validation_issues = progress.issues_count;
-                // Clear retry status when validation starts
-                self.retry_attempt = None;
-                self.retry_max = None;
-                self.retry_countdown = None;
+            sediman_tui_core::event::ProgressKind::Validation => {
+                self.agent.validation_confidence = progress.confidence;
+                self.agent.validation_issues = progress.issues_count;
+                self.agent.retry_attempt = None;
+                self.agent.retry_max = None;
+                self.agent.retry_countdown = None;
             }
-            "reflection" => {
-                self.reflection_status = true;
-                self.streaming_phase = "reflecting".to_string();
+            sediman_tui_core::event::ProgressKind::Reflection => {
+                self.agent.reflection_status = true;
+                self.agent.streaming_phase = "reflecting".to_string();
             }
-            _ => {}
         }
 
-        self.auto_scroll = true;
+        self.scroll.auto_scroll = true;
         self.mark_dirty();
     }
 
     /// Switch thinking section expanded
     pub fn toggle_thinking_expanded(&mut self) {
-        self.thinking_expanded = !self.thinking_expanded;
+        self.scroll.thinking_expanded = !self.scroll.thinking_expanded;
         self.mark_dirty();
     }
 
     /// Toggle steps section expanded state
     pub fn toggle_steps_expanded(&mut self) {
-        self.steps_expanded = !self.steps_expanded;
+        self.scroll.steps_expanded = !self.scroll.steps_expanded;
         self.mark_dirty();
     }
 
@@ -878,16 +917,20 @@ impl App {
     }
 
     pub fn bridge_url(&self) -> &str {
-        self.bridge.socket_path_str()
+        self.connection.bridge.socket_path_str()
     }
 
     pub fn save_session(&self) {
         let session_path = crate::config::session_path();
         if let Some(parent) = session_path.parent() {
-            let _ = std::fs::create_dir_all(parent);
+            if let Err(e) = std::fs::create_dir_all(parent) {
+                warn!("Failed to create session dir: {e}");
+            }
         }
         if let Ok(json) = serde_json::to_string_pretty(&self.messages) {
-            let _ = std::fs::write(&session_path, json);
+            if let Err(e) = std::fs::write(&session_path, json) {
+                warn!("Failed to save session: {e}");
+            }
         }
     }
 
@@ -899,8 +942,8 @@ impl App {
                     Ok(messages) => {
                         self.messages = messages;
                         self.show_banner = false;
-                        self.scroll_offset = 0;
-                        self.auto_scroll = true;
+                        self.scroll.offset = 0;
+                        self.scroll.auto_scroll = true;
                         self.mark_dirty();
                         return true;
                     }
@@ -925,7 +968,7 @@ impl App {
     /// Get models for the active provider tab, sorted reverse alphabetical (OpenCode: latest first).
     #[allow(dead_code)]
     pub fn filtered_models_for_provider(&self, provider_name: &str) -> Vec<&sediman_tui_bridge::ModelInfo> {
-        let mut models: Vec<&sediman_tui_bridge::ModelInfo> = self.model_list
+        let mut models: Vec<&sediman_tui_bridge::ModelInfo> = self.modals.model_list
             .iter()
             .filter(|m| m.provider == provider_name)
             .collect();
@@ -935,27 +978,27 @@ impl App {
 
     /// Initialize the model dialog state for the current provider/model.
     pub fn open_model_dialog(&mut self) {
-        self.model_dialog_filter.clear();
+        self.modals.model_dialog_filter.clear();
         let models = self.filtered_models_flat();
-        self.model_dialog_model_idx = models
+        self.modals.model_dialog_model_idx = models
             .iter()
             .position(|m| {
                 let full = format!("{}/{}", m.provider, m.id);
                 full == self.display_model_id() || m.id == self.model.as_deref().unwrap_or("")
             })
             .unwrap_or(0);
-        self.model_dialog_scroll = if self.model_dialog_model_idx > 6 {
-            self.model_dialog_model_idx - 3
+        self.modals.model_dialog_scroll = if self.modals.model_dialog_model_idx > 6 {
+            self.modals.model_dialog_model_idx - 3
         } else {
             0
         };
-        self.active_modal = Some(AppModal::ModelPicker);
+        self.modals.active = Some(AppModal::ModelPicker);
     }
 
     pub fn filtered_models_flat(&self) -> Vec<&sediman_tui_bridge::ModelInfo> {
-        let query = self.model_dialog_filter.to_lowercase();
+        let query = self.modals.model_dialog_filter.to_lowercase();
         let mut models: Vec<&sediman_tui_bridge::ModelInfo> = self
-            .model_list
+            .modals.model_list
             .iter()
             .filter(|m| {
                 if query.is_empty() {
@@ -967,12 +1010,12 @@ impl App {
             .collect();
         models.sort_by(|a, b| {
             // Prioritize providers with saved API keys
-            let a_has_key = self.available_providers
+            let a_has_key = self.modals.available_providers
                 .iter()
                 .find(|p| p.name == a.provider)
                 .map(|p| p.has_key)
                 .unwrap_or(false);
-            let b_has_key = self.available_providers
+            let b_has_key = self.modals.available_providers
                 .iter()
                 .find(|p| p.name == b.provider)
                 .map(|p| p.has_key)
@@ -986,8 +1029,8 @@ impl App {
             }
 
             // Otherwise, sort by category, provider, and model name (original logic)
-            let cat_a = self.available_providers.iter().find(|p| p.name == a.provider).map(|p| p.category.as_str()).unwrap_or("");
-            let cat_b = self.available_providers.iter().find(|p| p.name == b.provider).map(|p| p.category.as_str()).unwrap_or("");
+            let cat_a = self.modals.available_providers.iter().find(|p| p.name == a.provider).map(|p| p.category.as_str()).unwrap_or("");
+            let cat_b = self.modals.available_providers.iter().find(|p| p.name == b.provider).map(|p| p.category.as_str()).unwrap_or("");
             cat_a.cmp(cat_b).then_with(|| a.provider.cmp(&b.provider)).then_with(|| b.name.cmp(&a.name))
         });
         models
@@ -997,7 +1040,7 @@ impl App {
 
     pub fn clamp_model_scroll(&mut self) {
         let models = self.filtered_models_flat();
-        let idx = self.model_dialog_model_idx;
+        let idx = self.modals.model_dialog_model_idx;
         let mut display_pos = 0usize;
         let mut last_provider: Option<&str> = None;
         let mut target_pos = 0usize;
@@ -1012,16 +1055,16 @@ impl App {
             }
             display_pos += 1;
         }
-        if target_pos < self.model_dialog_scroll {
-            self.model_dialog_scroll = target_pos;
-        } else if target_pos >= self.model_dialog_scroll + Self::MODEL_DIALOG_VISIBLE {
-            self.model_dialog_scroll = target_pos - (Self::MODEL_DIALOG_VISIBLE - 1);
+        if target_pos < self.modals.model_dialog_scroll {
+            self.modals.model_dialog_scroll = target_pos;
+        } else if target_pos >= self.modals.model_dialog_scroll + Self::MODEL_DIALOG_VISIBLE {
+            self.modals.model_dialog_scroll = target_pos - (Self::MODEL_DIALOG_VISIBLE - 1);
         }
     }
 
     /// Open the memory system picker modal.
     pub fn open_memory_system_picker(&mut self) {
-        self.active_modal = Some(AppModal::MemorySystemPicker {
+        self.modals.active = Some(AppModal::MemorySystemPicker {
             systems: vec!["file (default)".to_string(), "hy (system 2)".to_string()],
             selected: 0,
         });
@@ -1029,7 +1072,7 @@ impl App {
 
     /// Open the memory menu with multiple options.
     pub fn open_memory_menu(&mut self) {
-        self.active_modal = Some(AppModal::MemoryMenu {
+        self.modals.active = Some(AppModal::MemoryMenu {
             selected: 0,
         });
     }
@@ -1065,7 +1108,7 @@ impl App {
         lines.push(ModalLine::normal(""));
         lines.push(ModalLine::muted("  Press ESC to close"));
 
-        self.active_modal = Some(AppModal::Info {
+        self.modals.active = Some(AppModal::Info {
             title,
             lines,
             scroll: 0,
@@ -1076,7 +1119,7 @@ impl App {
 pub async fn run(
     mut app: App,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let (event_tx, mut event_rx) = mpsc::unbounded_channel::<AppEvent>();
+    let (event_tx, mut event_rx) = mpsc::channel::<AppEvent>(1024);
     app.event_tx = Some(event_tx.clone());
 
     let event_loop = EventLoop::new(30.0, event_tx.clone());
@@ -1106,7 +1149,7 @@ pub async fn run(
 
     loop {
         // Check if we should exit (from Ctrl+C or other reasons)
-        if !app.running {
+        if !app.agent.running {
             break;
         }
 
@@ -1133,8 +1176,7 @@ pub async fn run(
 
         std::mem::swap(&mut front, &mut back);
 
-        let mut events_processed = 0u32;
-        const MAX_EVENTS_PER_FRAME: u32 = 50;
+        let mut events_processed = 0usize;
 
         tokio::select! {
             Some(event) = event_rx.recv() => {
@@ -1160,33 +1202,33 @@ pub async fn run(
                     }
                 }
 
-                if app.agent_running && tick_counter.is_multiple_of(3) {
+                if app.agent.running && tick_counter.is_multiple_of(3) {
                     app.advance_spinner();
                 }
                 if tick_counter.is_multiple_of(HEALTH_CHECK_INTERVAL_TICKS) {
-                    let was_connected = app.is_connected;
-                    app.is_connected = app.bridge.is_connected().await;
-                    if was_connected && !app.is_connected {
-                        app.reconnecting = true;
+                    let was_connected = app.connection.is_connected;
+                    app.connection.is_connected = app.connection.bridge.is_connected().await;
+                    if was_connected && !app.connection.is_connected {
+                        app.connection.reconnecting = true;
                         app.add_system_message("Backend connection lost — restarting...".into());
                         if let Some(ref restart_fn) = app.backend_restart_fn {
                             let restart = restart_fn.clone();
                             let tx = event_tx.clone();
                             tokio::spawn(async move {
                                 if restart().await {
-                                    let _ = tx.send(AppEvent::CommandOutput("Backend restarted.".into()));
+                                    crate::error::try_send(&tx, AppEvent::CommandOutput("Backend restarted.".into()));
                                 } else {
-                                    let _ = tx.send(AppEvent::CommandOutput("Backend restart failed.".into()));
+                                    crate::error::try_send(&tx, AppEvent::CommandOutput("Backend restart failed.".into()));
                                 }
                             });
                         }
-                    } else if !was_connected && app.is_connected {
-                        let was_reconnecting = app.reconnecting;
-                        app.reconnecting = false;
+                    } else if !was_connected && app.connection.is_connected {
+                        let was_reconnecting = app.connection.reconnecting;
+                        app.connection.reconnecting = false;
                         // Populate providers on first successful backend connection
-                        if app.available_providers.is_empty() {
-                            if let Ok(providers) = app.bridge.list_providers().await {
-                                app.available_providers = providers;
+                        if app.modals.available_providers.is_empty() {
+                            if let Ok(providers) = app.connection.bridge.list_providers().await {
+                                app.modals.available_providers = providers;
                                 app.mark_dirty();
                             }
                         }
@@ -1217,8 +1259,8 @@ pub async fn run(
             SideTab::Status => "Status".into(),
         },
         headless: app.headless,
-        coder_backend: app.coder_backend.clone(),
-        search_mode: app.search_mode.clone(),
+        coder_backend: app.agent.coder_backend.clone(),
+        search_mode: app.agent.search_mode.clone(),
         update_frequency: crate::config::default_update_frequency(),
         last_update_check: None,
         provider: app.provider.clone(),
@@ -1247,8 +1289,8 @@ mod tests {
         assert_eq!(app.provider, "test");
         assert_eq!(app.model.as_deref(), Some("gpt-4"));
         assert!(app.headless);
-        assert!(app.running);
-        assert_eq!(app.task_count, 0);
+        assert!(!app.agent.running);
+        assert_eq!(app.agent.task_count, 0);
         assert!(app.messages.is_empty());
     }
 
@@ -1273,7 +1315,7 @@ mod tests {
         let mut app = test_app();
         app.add_system_message("hello".into());
         assert_eq!(app.messages.len(), 1);
-        assert!(app.auto_scroll);
+        assert!(app.scroll.auto_scroll);
     }
 
     #[test]
@@ -1333,11 +1375,11 @@ mod tests {
     #[test]
     fn test_complete_agent_message() {
         let mut app = test_app();
-        app.agent_running = true;
+        app.agent.running = true;
         app.start_agent_message("task");
         app.append_step("planning foo".into());
         app.complete_agent_message(true, "all done".into(), 42, None, None);
-        assert!(!app.agent_running);
+        assert!(!app.agent.running);
     }
 
     #[test]
@@ -1408,11 +1450,11 @@ mod tests {
     #[test]
     fn test_skill_browser_state_defaults() {
         let app = test_app();
-        assert!(app.skill_browser_skills.is_empty());
-        assert_eq!(app.skill_browser_selected, 0);
-        assert!(app.skill_browser_filter.is_empty());
-        assert!(app.skill_browser_installed.is_empty());
-        assert_eq!(app.skill_browser_scroll, 0);
+        assert!(app.modals.skill_browser_skills.is_empty());
+        assert_eq!(app.modals.skill_browser_selected, 0);
+        assert!(app.modals.skill_browser_filter.is_empty());
+        assert!(app.modals.skill_browser_installed.is_empty());
+        assert_eq!(app.modals.skill_browser_scroll, 0);
     }
 
     #[test]
@@ -1772,9 +1814,9 @@ mod new_feature_tests {
         let mut app = make_app();
         app.start_agent_message("task");
         app.append_streaming_token("x", "planning");
-        assert_eq!(app.streaming_phase, "planning");
+        assert_eq!(app.agent.streaming_phase, "planning");
         app.append_streaming_token("y", "responding");
-        assert_eq!(app.streaming_phase, "responding");
+        assert_eq!(app.agent.streaming_phase, "responding");
     }
 
     // ── section toggles ─────────────────────────────────────────
@@ -1782,21 +1824,21 @@ mod new_feature_tests {
     #[test]
     fn test_toggle_thinking_expanded() {
         let mut app = make_app();
-        assert!(app.thinking_expanded);
+        assert!(app.scroll.thinking_expanded);
         app.toggle_thinking_expanded();
-        assert!(!app.thinking_expanded);
+        assert!(!app.scroll.thinking_expanded);
         app.toggle_thinking_expanded();
-        assert!(app.thinking_expanded);
+        assert!(app.scroll.thinking_expanded);
     }
 
     #[test]
     fn test_toggle_steps_expanded() {
         let mut app = make_app();
-        assert!(!app.steps_expanded);
+        assert!(!app.scroll.steps_expanded);
         app.toggle_steps_expanded();
-        assert!(app.steps_expanded);
+        assert!(app.scroll.steps_expanded);
         app.toggle_steps_expanded();
-        assert!(!app.steps_expanded);
+        assert!(!app.scroll.steps_expanded);
     }
 
     // ── scroll state ─────────────────────────────────────────────
@@ -1804,15 +1846,15 @@ mod new_feature_tests {
     #[test]
     fn test_scroll_paused_defaults_false() {
         let app = make_app();
-        assert!(!app.scroll_paused);
+        assert!(!app.scroll.paused);
     }
 
     #[test]
     fn test_auto_scroll_set_on_new_message() {
         let mut app = make_app();
-        app.auto_scroll = false;
+        app.scroll.auto_scroll = false;
         app.add_user_message("hi".into(), 1);
-        assert!(app.auto_scroll);
+        assert!(app.scroll.auto_scroll);
     }
 
     #[test]
@@ -1821,10 +1863,10 @@ mod new_feature_tests {
         app.start_agent_message("old task");
         app.append_streaming_token("old think", "thinking");
         app.append_streaming_token("old response", "responding");
-        app.streaming_phase = "thinking".into();
-        app.thinking_expanded = false;
-        app.steps_expanded = true;
-        app.scroll_paused = true;
+        app.agent.streaming_phase = "thinking".into();
+        app.scroll.thinking_expanded = false;
+        app.scroll.steps_expanded = true;
+        app.scroll.paused = true;
         app.start_agent_message("new task");
         let (thinking_text, result) = match app.messages.last().unwrap() {
             ChatMessage::Agent { thinking_text, result, .. } => (thinking_text, result),
@@ -1832,10 +1874,10 @@ mod new_feature_tests {
         };
         assert!(thinking_text.is_empty());
         assert!(result.is_none());
-        assert!(app.streaming_phase.is_empty());
-        assert!(app.thinking_expanded);
-        assert!(!app.steps_expanded);
-        assert!(!app.scroll_paused);
+        assert!(app.agent.streaming_phase.is_empty());
+        assert!(app.scroll.thinking_expanded);
+        assert!(!app.scroll.steps_expanded);
+        assert!(!app.scroll.paused);
     }
 
     // ── session persistence ─────────────────────────────────────

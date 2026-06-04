@@ -9,6 +9,7 @@ import { SessionsPage } from '@/components/pages/SessionsPage';
 import { SkillsPage } from '@/components/pages/SkillsPage';
 import { LogsPage } from '@/components/pages/LogsPage';
 import { SettingsPage } from '@/components/pages/SettingsPage';
+import { SandboxPanel } from '@/components/sandbox';
 import { useRPCConnection } from '@/hooks/useRPCConnection';
 
 function App() {
@@ -44,7 +45,12 @@ function App() {
     }
   };
 
-  return <AppLayout>{renderPage()}</AppLayout>;
+  return (
+    <AppLayout>
+      {renderPage()}
+      <SandboxPanel />
+    </AppLayout>
+  );
 }
 
 export default App;

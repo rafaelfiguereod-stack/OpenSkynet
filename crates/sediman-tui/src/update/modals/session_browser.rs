@@ -5,8 +5,8 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 /// Handle SessionBrowser modal key input.
 pub async fn handle_session_browser(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
-    let query = app.session_filter.to_lowercase();
-    let filtered_count = app.session_list
+    let query = app.modals.session_filter.to_lowercase();
+    let filtered_count = app.modals.session_list
         .iter()
         .filter(|s| {
             if query.is_empty() { return true; }
@@ -17,30 +17,30 @@ pub async fn handle_session_browser(app: &mut App, key: crossterm::event::KeyEve
 
     match key.code {
         KeyCode::Esc => {
-            app.session_filter.clear();
-            app.active_modal = None;
+            app.modals.session_filter.clear();
+            app.modals.active = None;
             true
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.session_filter.clear();
-            app.active_modal = None;
+            app.modals.session_filter.clear();
+            app.modals.active = None;
             true
         }
         KeyCode::Down | KeyCode::Char('j') => {
-            if app.session_selected < filtered_count.saturating_sub(1) {
-                app.session_selected += 1;
+            if app.modals.session_selected < filtered_count.saturating_sub(1) {
+                app.modals.session_selected += 1;
             }
             true
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            if app.session_selected > 0 {
-                app.session_selected -= 1;
+            if app.modals.session_selected > 0 {
+                app.modals.session_selected -= 1;
             }
             true
         }
         KeyCode::Enter => {
             // View session detail
-            let filtered: Vec<&sediman_tui_bridge::SessionInfo> = app.session_list
+            let filtered: Vec<&sediman_tui_bridge::SessionInfo> = app.modals.session_list
                 .iter()
                 .filter(|s| {
                     if query.is_empty() { return true; }
@@ -48,10 +48,10 @@ pub async fn handle_session_browser(app: &mut App, key: crossterm::event::KeyEve
                     searchable.contains(&query)
                 })
                 .collect();
-            if let Some(session) = filtered.get(app.session_selected) {
+            if let Some(session) = filtered.get(app.modals.session_selected) {
                 let sid = session.id.clone();
                 let task_preview = session.task.clone();
-                match app.bridge.get_session_detail(&sid).await {
+                match app.connection.bridge.get_session_detail(&sid).await {
                     Ok(detail) => {
                         let mut lines = vec![
                             crate::app::ModalLine::heading(format!("  Session #{}", sid)),
@@ -76,7 +76,7 @@ pub async fn handle_session_browser(app: &mut App, key: crossterm::event::KeyEve
                                 lines.push(crate::app::ModalLine::normal(format!("    {}...", truncated)));
                             }
                         }
-                        app.active_modal = Some(crate::app::AppModal::Info {
+                        app.modals.active = Some(crate::app::AppModal::Info {
                             title: format!("Session #{}", sid),
                             lines,
                             scroll: 0,
@@ -90,8 +90,8 @@ pub async fn handle_session_browser(app: &mut App, key: crossterm::event::KeyEve
             true
         }
         KeyCode::Char('d') => {
-            if app.session_filter.is_empty() {
-                let filtered: Vec<&sediman_tui_bridge::SessionInfo> = app.session_list
+            if app.modals.session_filter.is_empty() {
+                let filtered: Vec<&sediman_tui_bridge::SessionInfo> = app.modals.session_list
                     .iter()
                     .filter(|s| {
                         if query.is_empty() { return true; }
@@ -99,31 +99,31 @@ pub async fn handle_session_browser(app: &mut App, key: crossterm::event::KeyEve
                         searchable.contains(&query)
                     })
                     .collect();
-                if let Some(session) = filtered.get(app.session_selected) {
+                if let Some(session) = filtered.get(app.modals.session_selected) {
                     let sid = session.id.clone();
-                    match app.bridge.delete_session(&sid).await {
+                    match app.connection.bridge.delete_session(&sid).await {
                         Ok(()) => {
                             app.add_system_message(format!("Deleted session #{}", sid));
-                            if app.session_selected > 0 {
-                                app.session_selected -= 1;
+                            if app.modals.session_selected > 0 {
+                                app.modals.session_selected -= 1;
                             }
                             // Refresh list
-                            if let Ok(sessions) = app.bridge.get_sessions().await {
-                                app.session_list = sessions;
+                            if let Ok(sessions) = app.connection.bridge.get_sessions().await {
+                                app.modals.session_list = sessions;
                             }
                         }
                         Err(e) => app.add_error_message(format!("Failed to delete: {}", e)),
                     }
                 }
             } else {
-                app.session_filter.push('d');
+                app.modals.session_filter.push('d');
             }
             true
         }
         KeyCode::Backspace | KeyCode::Delete => {
-            if !app.session_filter.is_empty() {
-                app.session_filter.pop();
-                app.session_selected = 0;
+            if !app.modals.session_filter.is_empty() {
+                app.modals.session_filter.pop();
+                app.modals.session_selected = 0;
             }
             true
         }
@@ -132,8 +132,8 @@ pub async fn handle_session_browser(app: &mut App, key: crossterm::event::KeyEve
             true
         }
         KeyCode::Char(c) => {
-            app.session_filter.push(c);
-            app.session_selected = 0;
+            app.modals.session_filter.push(c);
+            app.modals.session_selected = 0;
             true
         }
         _ => false,

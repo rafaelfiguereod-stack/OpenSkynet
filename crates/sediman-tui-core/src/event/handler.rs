@@ -8,18 +8,18 @@ use super::message::AppEvent;
 
 pub struct EventLoop {
     tick_interval: Duration,
-    out_tx: mpsc::UnboundedSender<AppEvent>,
+    out_tx: mpsc::Sender<AppEvent>,
 }
 
 impl EventLoop {
-    pub fn new(tick_hz: f64, out_tx: mpsc::UnboundedSender<AppEvent>) -> Self {
+    pub fn new(tick_hz: f64, out_tx: mpsc::Sender<AppEvent>) -> Self {
         Self {
             tick_interval: Duration::from_secs_f64(1.0 / tick_hz),
             out_tx,
         }
     }
 
-    pub fn sender(&self) -> mpsc::UnboundedSender<AppEvent> {
+    pub fn sender(&self) -> mpsc::Sender<AppEvent> {
         self.out_tx.clone()
     }
 
@@ -53,7 +53,7 @@ impl EventLoop {
             };
 
             if let Some(ev) = event {
-                if tx.send(ev).is_err() {
+                if tx.send(ev).await.is_err() {
                     break;
                 }
             }

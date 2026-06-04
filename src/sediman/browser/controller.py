@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 from dataclasses import dataclass, field
+from enum import Enum
 from typing import Any
 from collections.abc import Callable
 
@@ -18,6 +19,28 @@ except ImportError:
 from sediman.config import DATA_DIR
 
 logger = structlog.get_logger()
+
+
+class BrowserErrorType(Enum):
+    """Types of browser errors for better error handling."""
+    NAVIGATION_FAILED = "navigation_failed"
+    ELEMENT_NOT_FOUND = "element_not_found"
+    TIMEOUT = "timeout"
+    NETWORK_ERROR = "network_error"
+    PERMISSION_DENIED = "permission_denied"
+    INVALID_STATE = "invalid_state"
+    PLAYWRIGHT_ERROR = "playwright_error"
+    UNKNOWN = "unknown"
+
+
+@dataclass
+class BrowserActionResult:
+    """Enhanced result type for browser operations with error information."""
+    success: bool
+    message: str
+    error_type: BrowserErrorType | None = None
+    retryable: bool = False
+    error_details: str | None = None
 
 
 @dataclass
@@ -143,18 +166,31 @@ class BrowserController:
             )
 
     async def stop(self) -> None:
+        """Stop browser with enhanced error handling and resource cleanup."""
         if self._own_browser:
             try:
                 await self._own_browser.close()
+                logger.info("browser_closed_successfully")
+            except asyncio.TimeoutError as e:
+                logger.warning("browser_close_timeout", error=str(e))
+            except ConnectionRefusedError as e:
+                logger.warning("browser_close_connection_refused", error=str(e))
             except Exception as e:
-                logger.debug("browser_close_failed", error=str(e))
-            self._own_browser = None
+                logger.warning("browser_close_failed", error=str(e), error_type=type(e).__name__)
+            finally:
+                self._own_browser = None
+
         if self._playwright:
             try:
                 await self._playwright.stop()
+                logger.info("playwright_stopped_successfully")
+            except asyncio.TimeoutError as e:
+                logger.warning("playwright_stop_timeout", error=str(e))
             except Exception as e:
-                logger.debug("playwright_stop_failed", error=str(e))
-            self._playwright = None
+                logger.warning("playwright_stop_failed", error=str(e), error_type=type(e).__name__)
+            finally:
+                self._playwright = None
+
         self._own_page = None
         self._started = False
         logger.info("browser_controller_stopped")
@@ -178,39 +214,98 @@ class BrowserController:
     # ── Core Actions ───────────────────────────────────────
 
     async def navigate(self, url: str) -> str:
+        """Navigate to URL with enhanced error handling and classification."""
         if not self._page:
-            return "Browser not started."
+            return "Browser not started. Call start() first."
+
+        if not url or not isinstance(url, str):
+            logger.warning("navigate_invalid_url", url=url)
+            return "Invalid URL provided"
+
         try:
             response = await self._page.goto(url, wait_until="domcontentloaded", timeout=30000)
             final_url = self._page.url
             status = response.status if response else "unknown"
             self._emit_step("navigate", f"{final_url} (status: {status})")
             return f"Navigated to {final_url} (HTTP {status})"
+        except asyncio.TimeoutError as e:
+            logger.warning("navigate_timeout", url=url, error=str(e))
+            return f"Navigation to {url} timed out. The page may be loading slowly or unresponsive. Consider retrying."
         except Exception as e:
-            logger.warning("navigate_failed", url=url, error=str(e))
-            return f"Failed to navigate to {url}: {e}"
+            error_msg = str(e).lower()
+            error_type = BrowserErrorType.UNKNOWN
+
+            # Classify error for better handling
+            if "net::err_connection_refused" in error_msg or "connection refused" in error_msg:
+                error_type = BrowserErrorType.NETWORK_ERROR
+                logger.warning("navigate_connection_refused", url=url, error=str(e))
+                return f"Failed to navigate to {url}: Connection refused. The server may be down or unreachable."
+            elif "net::err_name_not_resolved" in error_msg or "dns" in error_msg:
+                error_type = BrowserErrorType.NETWORK_ERROR
+                logger.warning("navigate_dns_failed", url=url, error=str(e))
+                return f"Failed to navigate to {url}: DNS resolution failed. Check the URL or network connection."
+            elif "certificate" in error_msg or "ssl" in error_msg:
+                error_type = BrowserErrorType.NETWORK_ERROR
+                logger.warning("navigate_ssl_error", url=url, error=str(e))
+                return f"Failed to navigate to {url}: SSL certificate error. The site may have an invalid certificate."
+            elif "timeout" in error_msg:
+                error_type = BrowserErrorType.TIMEOUT
+                logger.warning("navigate_timeout_generic", url=url, error=str(e))
+                return f"Failed to navigate to {url}: Request timeout. Consider retrying or increasing timeout."
+            else:
+                logger.warning("navigate_failed", url=url, error=str(e), error_type=error_type.value)
+                return f"Failed to navigate to {url}: {e}"
 
     async def click(self, ref_id: int) -> str:
+        """Click element with enhanced error handling and retry suggestions."""
         if not self._page:
-            return "Browser not started."
+            return "Browser not started. Call start() first."
+
         try:
             element = await self._resolve_element(ref_id)
             if not element:
+                logger.warning("click_element_not_found", ref_id=ref_id)
                 return f"Element [ref_id={ref_id}] not found on page. Try browser_snapshot() to see available elements."
+
             tag = await element.evaluate("el => el.tagName.toLowerCase()")
             text = await element.evaluate("el => el.textContent?.slice(0,50) || ''")
             url_before = self._page.url
+
             await element.click()
+
+            # Wait for navigation if it's a link or button
             try:
                 if tag in ("a", "button") and text.lower().strip() not in ("cancel", "close", "dismiss"):
                     await self._page.wait_for_load_state("domcontentloaded", timeout=3000)
             except Exception:
-                logger.debug("silent_error", _line=207)
+                logger.debug("click_navigation_wait_failed", ref_id=ref_id, _line=207)
+
             self._emit_step("click", f"[ref_id={ref_id}] {tag} '{text}'")
             return f"Clicked element [ref_id={ref_id}] ({tag}: '{text}')"
+
+        except asyncio.TimeoutError as e:
+            logger.warning("click_timeout", ref_id=ref_id, error=str(e))
+            return f"Click on [ref_id={ref_id}] timed out. The page may be loading slowly. Try snapshot() to verify element is still present."
         except Exception as e:
-            logger.warning("click_failed", ref_id=ref_id, error=str(e))
-            return f"Click failed for [ref_id={ref_id}]: {e}"
+            error_msg = str(e).lower()
+            error_type = BrowserErrorType.UNKNOWN
+
+            # Classify click errors
+            if "not clickable" in error_msg or "obscured" in error_msg:
+                error_type = BrowserErrorType.ELEMENT_NOT_FOUND
+                logger.warning("click_obscured", ref_id=ref_id, error=str(e))
+                return f"Element [ref_id={ref_id}] is not clickable. It may be obscured by another element or hidden. Try scrolling to it first."
+            elif "detached" in error_msg or "removed" in error_msg:
+                error_type = BrowserErrorType.ELEMENT_NOT_FOUND
+                logger.warning("click_detached", ref_id=ref_id, error=str(e))
+                return f"Element [ref_id={ref_id}] was removed from the page. Try snapshot() to get updated elements."
+            elif "timeout" in error_msg:
+                error_type = BrowserErrorType.TIMEOUT
+                logger.warning("click_timeout_generic", ref_id=ref_id, error=str(e))
+                return f"Click on [ref_id={ref_id}] timed out. Consider retrying or taking a snapshot to verify element state."
+            else:
+                logger.warning("click_failed", ref_id=ref_id, error=str(e), error_type=error_type.value)
+                return f"Click failed for [ref_id={ref_id}]: {e}"
 
     async def type_text(self, ref_id: int, text: str, submit: bool = False) -> str:
         if not self._page:

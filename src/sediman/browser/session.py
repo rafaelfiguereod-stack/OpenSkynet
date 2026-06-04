@@ -42,6 +42,11 @@ class BrowserSession:
         self._start_lock = asyncio.Lock()
         self.on_screenshot = on_screenshot
 
+        # For direct Playwright screenshots (fallback when CDP isn't available)
+        self._playwright_browser: Any = None
+        self._playwright_context: Any = None
+        self._playwright_lock = asyncio.Lock()
+
     @property
     def is_started(self) -> bool:
         return self._started and self._browser is not None
@@ -97,6 +102,7 @@ class BrowserSession:
                 "highlight_elements": True,
                 "user_data_dir": self.user_data_dir,
                 "keep_alive": True,
+                "is_local": True,  # Force local mode to avoid cloud API requirements
             }
 
             if self.proxy:
@@ -119,28 +125,92 @@ class BrowserSession:
                 logger.debug("browser_close_failed", error=str(e))
             self._browser = None
             self._started = False
-            logger.info("browser_session_stopped")
+
+        # Clean up Playwright screenshot browser
+        if self._playwright_context:
+            try:
+                await self._playwright_context.close()
+            except Exception as e:
+                logger.debug("playwright_context_close_failed", error=str(e))
+            self._playwright_context = None
+
+        if self._playwright_browser:
+            try:
+                await self._playwright_browser.close()
+            except Exception as e:
+                logger.debug("playwright_browser_close_failed", error=str(e))
+            self._playwright_browser = None
+
+        logger.info("browser_session_stopped")
 
     @property
     def browser(self) -> Any:
         return self._browser
 
+    async def _get_playwright_for_screenshot(self) -> Any:
+        """Get or create a Playwright browser for screenshots."""
+        async with self._playwright_lock:
+            if self._playwright_context is not None:
+                return self._playwright_context
+
+            try:
+                from playwright.async_api import async_playwright
+
+                p = await async_playwright().start()
+                self._playwright_browser = await p.chromium.launch(headless=self.headless)
+                self._playwright_context = await self._playwright_browser.new_context()
+                logger.info("playwright_screenshot_browser_created")
+                return self._playwright_context
+            except Exception as e:
+                logger.debug(f"Failed to create Playwright browser: {e}")
+                return None
+
     async def take_screenshot(self) -> str | None:
         try:
             if not self._browser:
                 return None
-            session = await self._browser.create_session()
+
+            # Try using the browser's internal CDP methods first
             try:
-                page = session.agent_current_page
-                if not page:
-                    return None
-                screenshot_bytes = await page.screenshot()
-                return base64.b64encode(screenshot_bytes).decode("utf-8")
-            finally:
+                # Check if CDP is initialized by trying to access cdp_client
+                _ = self._browser.cdp_client
+                # If we get here, CDP is initialized, try the normal screenshot path
+                session = await self._browser.get_or_create_cdp_session()
                 try:
-                    await session.close()
-                except Exception:
-                    logger.debug("silent_error", _line=141)
+                    page = session.agent_current_page
+                    if not page:
+                        page = await session.new_page()
+                        await page.goto("about:blank", timeout=5000)
+
+                    if page:
+                        screenshot_bytes = await page.screenshot(timeout=10000)
+                        return base64.b64encode(screenshot_bytes).decode("utf-8")
+                finally:
+                    try:
+                        await session.close()
+                    except Exception:
+                        logger.debug("silent_error", _line=141)
+            except Exception as cdp_error:
+                logger.debug(f"CDP screenshot failed: {cdp_error}")
+
+            # Fallback: Use direct Playwright for screenshots
+            try:
+                context = await self._get_playwright_for_screenshot()
+                if context:
+                    # Try to get existing pages or create a new one
+                    pages = context.pages
+                    if pages and len(pages) > 0:
+                        page = pages[0]
+                    else:
+                        page = await context.new_page()
+                        await page.goto("about:blank", timeout=5000)
+
+                    screenshot_bytes = await page.screenshot(timeout=10000)
+                    return base64.b64encode(screenshot_bytes).decode("utf-8")
+            except Exception as pw_error:
+                logger.debug(f"Playwright screenshot failed: {pw_error}")
+
+            return None
         except Exception as e:
             logger.debug("screenshot_failed", error=str(e))
             return None

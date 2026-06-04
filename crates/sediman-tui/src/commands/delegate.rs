@@ -8,7 +8,7 @@ pub async fn handle_delegate(app: &mut App, args: &str) {
         app.add_system_message("Usage: /delegate <task>".into());
         return;
     }
-    if app.agent_running {
+    if app.agent.running {
         app.add_system_message("Agent is busy. Wait for it to finish.".into());
         return;
     }
@@ -25,7 +25,7 @@ pub async fn handle_parallel(app: &mut App, args: &str) {
         app.add_system_message("Usage: /parallel <task1> | <task2> | ...".into());
         return;
     }
-    if app.agent_running {
+    if app.agent.running {
         app.add_system_message("Agent is busy. Wait for it to finish.".into());
         return;
     }

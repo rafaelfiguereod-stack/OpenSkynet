@@ -23,7 +23,7 @@ pub async fn handle_connect(app: &mut App, args: &str) {
             }
             let token = rest.to_string();
             match app
-                .bridge
+                .connection.bridge
                 .configure_integration(service, serde_json::json!({
                     "token": token,
                     "enabled": true,
@@ -51,7 +51,7 @@ pub async fn handle_connect(app: &mut App, args: &str) {
             let app_id = parts[0];
             let app_secret = parts[1];
             match app
-                .bridge
+                .connection.bridge
                 .configure_integration(service, serde_json::json!({
                     "app_id": app_id,
                     "app_secret": app_secret,
@@ -73,7 +73,7 @@ pub async fn handle_connect(app: &mut App, args: &str) {
             }
             let account_id = rest.to_string();
             match app
-                .bridge
+                .connection.bridge
                 .configure_integration(service, serde_json::json!({
                     "account_id": account_id,
                     "enabled": true,
@@ -97,7 +97,7 @@ pub async fn handle_connect(app: &mut App, args: &str) {
 }
 
 async fn open_connect_picker(app: &mut App) {
-    match app.bridge.list_integrations().await {
+    match app.connection.bridge.list_integrations().await {
         Ok(mut integrations) => {
             // Ensure all expected integrations are present
             const EXPECTED_INTEGRATIONS: &[&str] = &["discord", "telegram", "slack", "whatsapp", "lark", "wechat"];
@@ -122,10 +122,10 @@ async fn open_connect_picker(app: &mut App) {
                 app.add_error_message("No integrations available.".into());
                 return;
             }
-            app.connect_integration_list = integrations;
-            app.connect_picker_idx = 0;
-            app.connect_picker_scroll = 0;
-            app.active_modal = Some(crate::app::AppModal::ConnectPicker);
+            app.modals.connect_integration_list = integrations;
+            app.modals.connect_picker_idx = 0;
+            app.modals.connect_picker_scroll = 0;
+            app.modals.active = Some(crate::app::AppModal::ConnectPicker);
         }
         Err(e) => app.add_error_message(format!("Failed to load integrations: {}", e)),
     }

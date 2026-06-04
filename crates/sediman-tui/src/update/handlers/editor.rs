@@ -5,20 +5,20 @@ use crossterm::event::{KeyCode, KeyModifiers};
 
 /// Scroll up by a specified amount (show older content).
 fn scroll_up(app: &mut App, amount: u16) {
-    app.scroll_offset = app.scroll_offset.saturating_add(amount);
-    app.auto_scroll = false;
-    app.scroll_paused = true;
+    app.scroll.offset = app.scroll.offset.saturating_add(amount);
+    app.scroll.auto_scroll = false;
+    app.scroll.paused = true;
 }
 
 /// Scroll down by a specified amount (show newer content).
 fn scroll_down(app: &mut App, amount: u16) {
-    if app.scroll_offset <= amount {
-        app.scroll_offset = 0;
-        app.scroll_paused = false;
-        app.auto_scroll = true;
+    if app.scroll.offset <= amount {
+        app.scroll.offset = 0;
+        app.scroll.paused = false;
+        app.scroll.auto_scroll = true;
     } else {
-        app.scroll_offset = app.scroll_offset.saturating_sub(amount);
-        app.auto_scroll = false;
+        app.scroll.offset = app.scroll.offset.saturating_sub(amount);
+        app.scroll.auto_scroll = false;
     }
 }
 
@@ -26,9 +26,9 @@ fn scroll_down(app: &mut App, amount: u16) {
 pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
     // Esc: cancel search or clear input
     if key.code == KeyCode::Esc {
-        if app.agent_running {
+        if app.agent.running {
             app.interrupt.trigger();
-            app.agent_running = false;
+            app.agent.running = false;
             app.append_step("-- Interrupted --".to_string());
         } else {
             app.editor.delete_line_by_head();
@@ -38,9 +38,9 @@ pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool
 
     // Ctrl+C: clear input or cancel agent
     if key.code == KeyCode::Char('c') && key.modifiers.contains(KeyModifiers::CONTROL) {
-        if app.agent_running {
+        if app.agent.running {
             app.interrupt.trigger();
-            app.agent_running = false;
+            app.agent.running = false;
             app.append_step("-- Cancelled --".to_string());
         } else {
             app.editor.delete_line_by_head();
@@ -50,20 +50,20 @@ pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool
 
     // Ctrl+/ toggles help (same as OpenCode's ctrl+?)
     if key.code == KeyCode::Char('/') && key.modifiers.contains(KeyModifiers::CONTROL) {
-        if matches!(app.active_modal, Some(crate::app::AppModal::Help { .. })) {
-            app.active_modal = None;
+        if matches!(app.modals.active, Some(crate::app::AppModal::Help { .. })) {
+            app.modals.active = None;
         } else {
-            app.active_modal = Some(crate::app::AppModal::Help { scroll: 0 });
+            app.modals.active = Some(crate::app::AppModal::Help { scroll: 0 });
         }
         return true;
     }
 
     // Ctrl+P: alias for help toggle
     if key.code == KeyCode::Char('p') && key.modifiers.contains(KeyModifiers::CONTROL) {
-        if matches!(app.active_modal, Some(crate::app::AppModal::Help { .. })) {
-            app.active_modal = None;
+        if matches!(app.modals.active, Some(crate::app::AppModal::Help { .. })) {
+            app.modals.active = None;
         } else {
-            app.active_modal = Some(crate::app::AppModal::Help { scroll: 0 });
+            app.modals.active = Some(crate::app::AppModal::Help { scroll: 0 });
         }
         return true;
     }
@@ -98,24 +98,24 @@ pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool
     if key.code == KeyCode::Char(' ') {
         let is_empty = app.editor.lines().iter().all(|l| l.trim().is_empty());
         if is_empty && !app.editor.is_searching() {
-            if app.agent_running {
+            if app.agent.running {
                 // Toggle inline sections during streaming: thinking → steps → reset
                 let has_thinking = app.messages.last()
                     .map(|m| matches!(m, ChatMessage::Agent { thinking_text, .. } if !thinking_text.is_empty()))
                     .unwrap_or(false);
-                if has_thinking && !app.steps_expanded {
+                if has_thinking && !app.scroll.steps_expanded {
                     app.toggle_steps_expanded();
-                } else if app.thinking_expanded && app.steps_expanded {
+                } else if app.scroll.thinking_expanded && app.scroll.steps_expanded {
                     app.toggle_thinking_expanded();
-                } else if !app.thinking_expanded {
+                } else if !app.scroll.thinking_expanded {
                     app.toggle_thinking_expanded();
-                    app.steps_expanded = true;
+                    app.scroll.steps_expanded = true;
                 } else {
                     app.toggle_steps_expanded();
                 }
-                app.auto_scroll = true;
+                app.scroll.auto_scroll = true;
             } else if app.toggle_tab_expansion() {
-                app.auto_scroll = true;
+                app.scroll.auto_scroll = true;
             }
             return true;
         }
@@ -125,13 +125,13 @@ pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool
     if app.editor.lines().iter().all(|l| l.trim().is_empty()) && !app.editor.is_searching() {
         if key.code == KeyCode::Left {
             if app.switch_prev_tab() {
-                app.auto_scroll = true;
+                app.scroll.auto_scroll = true;
             }
             return true;
         }
         if key.code == KeyCode::Right {
             if app.switch_next_tab() {
-                app.auto_scroll = true;
+                app.scroll.auto_scroll = true;
             }
             return true;
         }
@@ -166,7 +166,7 @@ pub fn handle_editor_key(app: &mut App, key: crossterm::event::KeyEvent) -> bool
                 app.completer.complete(&prefix);
                 app.completer.next();
             }
-        } else if app.agent_running {
+        } else if app.agent.running {
             app.toggle_thinking_expanded();
         } else {
             // Try file path completion for the last word
@@ -357,30 +357,30 @@ mod file_complete_tests {
     #[test]
     fn test_scroll_up_sets_paused() {
         let mut app = make_app();
-        app.scroll_offset = 10;
+        app.scroll.offset = 10;
         scroll_up(&mut app, 3);
-        assert!(app.scroll_paused);
-        assert_eq!(app.scroll_offset, 13);
+        assert!(app.scroll.paused);
+        assert_eq!(app.scroll.offset, 13);
     }
 
     #[test]
     fn test_scroll_down_to_bottom_resumes() {
         let mut app = make_app();
-        app.scroll_offset = 3;
-        app.scroll_paused = true;
+        app.scroll.offset = 3;
+        app.scroll.paused = true;
         scroll_down(&mut app, 5);
-        assert_eq!(app.scroll_offset, 0);
-        assert!(!app.scroll_paused);
-        assert!(app.auto_scroll);
+        assert_eq!(app.scroll.offset, 0);
+        assert!(!app.scroll.paused);
+        assert!(app.scroll.auto_scroll);
     }
 
     #[test]
     fn test_scroll_down_partial_keeps_pause() {
         let mut app = make_app();
-        app.scroll_offset = 10;
-        app.scroll_paused = true;
+        app.scroll.offset = 10;
+        app.scroll.paused = true;
         scroll_down(&mut app, 3);
-        assert_eq!(app.scroll_offset, 7);
-        assert!(!app.auto_scroll);
+        assert_eq!(app.scroll.offset, 7);
+        assert!(!app.scroll.auto_scroll);
     }
 }
