@@ -40,7 +40,7 @@ impl Default for ThemeColors {
 
 impl ThemeColors {
     pub fn to_theme(&self) -> Theme {
-        let resolve = |hex: &str| parse_hex(hex).unwrap_or_else(|| Color::from_rgb(0xff, 0xff, 0xff));
+        let resolve = |hex: &str| Color::from_hex(hex).unwrap_or_else(|| Color::from_rgb(0xff, 0xff, 0xff));
 
         let primary = resolve(&self.primary);
         let secondary = resolve(&self.secondary);
@@ -132,15 +132,6 @@ impl ThemeColors {
             background_darker: hex(theme.background_darker),
         }
     }
-}
-
-pub fn parse_hex(s: &str) -> Option<Color> {
-    let s = s.trim().trim_start_matches('#');
-    if s.len() != 6 { return None; }
-    let r = u8::from_str_radix(&s[0..2], 16).ok()?;
-    let g = u8::from_str_radix(&s[2..4], 16).ok()?;
-    let b = u8::from_str_radix(&s[4..6], 16).ok()?;
-    Some(Color::from_rgb(r, g, b))
 }
 
 #[derive(Clone, Debug)]
@@ -252,10 +243,11 @@ mod tests {
 
     #[test]
     fn test_parse_hex() {
-        assert_eq!(parse_hex("#fab283"), Some(Color::from_rgb(0xfa, 0xb2, 0x83)));
-        assert_eq!(parse_hex("fab283"), Some(Color::from_rgb(0xfa, 0xb2, 0x83)));
-        assert_eq!(parse_hex(""), None);
-        assert_eq!(parse_hex("#fff"), None);
+        assert_eq!(Color::from_hex("#fab283"), Some(Color::from_rgb(0xfa, 0xb2, 0x83)));
+        assert_eq!(Color::from_hex("fab283"), Some(Color::from_rgb(0xfa, 0xb2, 0x83)));
+        assert_eq!(Color::from_hex("  #fab283  "), Some(Color::from_rgb(0xfa, 0xb2, 0x83)));
+        assert_eq!(Color::from_hex(""), None);
+        assert_eq!(Color::from_hex("#fff"), None);
     }
 
     #[test]

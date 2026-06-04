@@ -1,4 +1,5 @@
 use sediman_tui_core::renderer::{CellBuffer, Rect, Style, display_width};
+use sediman_tui_core::component::{fill_row, draw_pill};
 use crate::app::App;
 
 use super::messages::format_elapsed;
@@ -7,21 +8,18 @@ pub fn render_status_bar(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
     let y = area.y;
 
-    for sx in area.x..area.right() {
-        buf.put_char(sx, y, ' ', Style::new().bg(t.background_panel).fg(t.text));
-    }
+    fill_row(buf, y, area.x, area.right(), Style::new().bg(t.background_panel).fg(t.text));
 
     let mut x = area.x;
 
-    if app.agent_running {
-        let elapsed = format_elapsed(app.agent_start.elapsed().as_secs());
+    if app.agent.running {
+        let elapsed = format_elapsed(app.agent.start.elapsed().as_secs());
         let pill = format!(" \u{25cf} {} ", elapsed);
-        buf.draw_str(x, y, &pill, Style::new().bg(t.primary).fg(t.background_darker));
-        x += display_width(&pill);
+        x = draw_pill(buf, x, y, &pill, Style::new().bg(t.primary).fg(t.background_darker));
 
         // Show streaming phase with enhanced indicators
-        if !app.streaming_phase.is_empty() {
-            let (phase_label, phase_color) = match app.streaming_phase.as_str() {
+        if !app.agent.streaming_phase.is_empty() {
+            let (phase_label, phase_color) = match app.agent.streaming_phase.as_str() {
                 "thinking" => ("thinking", t.warning),
                 "planning" => ("planning", t.info),
                 "executing" => ("executing", t.primary),
@@ -33,22 +31,20 @@ pub fn render_status_bar(buf: &mut CellBuffer, area: Rect, app: &App) {
             };
             if !phase_label.is_empty() {
                 let phase_pill = format!(" {} ", phase_label);
-                buf.draw_str(x, y, &phase_pill, Style::new().bg(phase_color).fg(t.background_darker));
-                x += display_width(&phase_pill);
+                x = draw_pill(buf, x, y, &phase_pill, Style::new().bg(phase_color).fg(t.background_darker));
             }
         }
 
         // Show retry countdown
-        if let (Some(attempt), Some(max), Some(countdown)) = (app.retry_attempt, app.retry_max, app.retry_countdown) {
+        if let (Some(attempt), Some(max), Some(countdown)) = (app.agent.retry_attempt, app.agent.retry_max, app.agent.retry_countdown) {
             if countdown > 0.0 {
                 let retry_text = format!(" {} ({}/{}) {:.1}s ", "⟳", attempt, max, countdown);
-                buf.draw_str(x, y, &retry_text, Style::new().bg(t.error).fg(t.background_darker));
-                x += display_width(&retry_text);
+                x = draw_pill(buf, x, y, &retry_text, Style::new().bg(t.error).fg(t.background_darker));
             }
         }
 
         // Show validation confidence
-        if let Some(confidence) = app.validation_confidence {
+        if let Some(confidence) = app.agent.validation_confidence {
             let conf_color = if confidence >= 0.8 {
                 t.success
             } else if confidence >= 0.5 {
@@ -57,22 +53,19 @@ pub fn render_status_bar(buf: &mut CellBuffer, area: Rect, app: &App) {
                 t.error
             };
             let conf_text = format!(" {:.0}% ", confidence * 100.0);
-            buf.draw_str(x, y, &conf_text, Style::new().bg(conf_color).fg(t.background_darker));
-            x += display_width(&conf_text);
+            x = draw_pill(buf, x, y, &conf_text, Style::new().bg(conf_color).fg(t.background_darker));
         }
 
         // Show validation issues count
-        if let Some(issues) = app.validation_issues {
+        if let Some(issues) = app.agent.validation_issues {
             if issues > 0 {
                 let issues_text = format!(" ⚠ {} ", issues);
-                buf.draw_str(x, y, &issues_text, Style::new().bg(t.warning).fg(t.background_darker));
-                x += display_width(&issues_text);
+                x = draw_pill(buf, x, y, &issues_text, Style::new().bg(t.warning).fg(t.background_darker));
             }
         }
-    } else if app.task_count > 0 {
-        let pill = format!(" {} ", app.task_count);
-        buf.draw_str(x, y, &pill, Style::new().bg(t.background_darker).fg(t.text_muted));
-        x += display_width(&pill);
+    } else if app.agent.task_count > 0 {
+        let pill = format!(" {} ", app.agent.task_count);
+        x = draw_pill(buf, x, y, &pill, Style::new().bg(t.background_darker).fg(t.text_muted));
     }
 
     let mode = app.permission.current_label();
@@ -83,13 +76,113 @@ pub fn render_status_bar(buf: &mut CellBuffer, area: Rect, app: &App) {
         _ => t.text,
     };
     let mode_text = format!(" {} ", mode);
-    buf.draw_str(x, y, &mode_text, Style::new().bg(mode_color).fg(t.background_darker));
-    x += display_width(&mode_text);
+    x = draw_pill(buf, x, y, &mode_text, Style::new().bg(mode_color).fg(t.background_darker));
 
     let model = app.model.as_deref().unwrap_or("default");
     let model_text = format!(" {} ", model);
     let model_x = area.right().saturating_sub(display_width(&model_text));
     if model_x > x + 2 {
         buf.draw_str(model_x, y, &model_text, Style::new().bg(t.background_darker).fg(t.text_muted));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::App;
+    use sediman_tui_bridge::ApiClient;
+
+    fn test_app() -> App {
+        App::new("test".into(), Some("gpt-4".into()), None, true, ApiClient::new("/tmp/test_opencode.sock"))
+    }
+
+    fn find_str(buf: &CellBuffer, s: &str) -> bool {
+        let chars: Vec<char> = s.chars().collect();
+        if chars.is_empty() { return true; }
+        'outer: for y in 0..buf.height() {
+            for start_x in 0..buf.width() {
+                let mut found = true;
+                for (i, &expected) in chars.iter().enumerate() {
+                    let x = start_x as usize + i;
+                    if x >= buf.width() as usize { continue 'outer; }
+                    match buf.get(x as u16, y) {
+                        Some(cell) if cell.ch == expected => {}
+                        _ => { found = false; break; }
+                    }
+                }
+                if found { return true; }
+            }
+        }
+        false
+    }
+
+    fn find_char(buf: &CellBuffer, ch: char) -> bool {
+        for y in 0..buf.height() {
+            for x in 0..buf.width() {
+                if let Some(cell) = buf.get(x, y) {
+                    if cell.ch == ch { return true; }
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn test_status_bar_shows_model() {
+        let mut buf = CellBuffer::new(80, 1);
+        let app = test_app();
+        render_status_bar(&mut buf, Rect::new(0, 0, 80, 1), &app);
+        assert!(find_str(&buf, "gpt-4"), "should show model name on right side");
+    }
+
+    #[test]
+    fn test_status_bar_shows_mode_label() {
+        let mut buf = CellBuffer::new(80, 1);
+        let app = test_app();
+        render_status_bar(&mut buf, Rect::new(0, 0, 80, 1), &app);
+        let mode = app.permission.current_label();
+        assert!(find_str(&buf, mode), "should show permission mode label");
+    }
+
+    #[test]
+    fn test_status_bar_fills_row_with_background() {
+        let mut buf = CellBuffer::new(80, 1);
+        let app = test_app();
+        render_status_bar(&mut buf, Rect::new(0, 0, 80, 1), &app);
+        for x in 0..80u16 {
+            let cell = buf.get(x, 0).unwrap();
+            assert!(cell.style.bg.is_some(), "cell at x={} should have background", x);
+        }
+    }
+
+    #[test]
+    fn test_status_bar_shows_task_count_when_not_running() {
+        let mut buf = CellBuffer::new(80, 1);
+        let mut app = test_app();
+        app.agent.running = false;
+        app.agent.task_count = 5;
+        render_status_bar(&mut buf, Rect::new(0, 0, 80, 1), &app);
+        assert!(find_str(&buf, "5"), "should show task count pill");
+    }
+
+    #[test]
+    fn test_status_bar_agent_running_shows_elapsed() {
+        let mut buf = CellBuffer::new(80, 1);
+        let mut app = test_app();
+        app.agent.running = true;
+        app.agent.start = std::time::Instant::now();
+        render_status_bar(&mut buf, Rect::new(0, 0, 80, 1), &app);
+        assert!(find_char(&buf, '\u{25cf}'), "should show bullet when agent running");
+    }
+
+    #[test]
+    fn test_status_bar_shows_streaming_phase() {
+        let mut buf = CellBuffer::new(80, 1);
+        let mut app = test_app();
+        app.agent.running = true;
+        app.agent.start = std::time::Instant::now();
+        app.agent.streaming_phase = "thinking".into();
+        render_status_bar(&mut buf, Rect::new(0, 0, 80, 1), &app);
+        assert!(find_str(&buf, "thinking"), "should show streaming phase label");
     }
 }

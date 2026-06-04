@@ -2848,7 +2848,6 @@ dependencies = [
  "serde",
  "serde_json",
  "syntect",
- "thiserror 2.0.18",
  "tokio",
  "tracing",
  "unicode-width 0.2.2",

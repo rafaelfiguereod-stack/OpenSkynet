@@ -11,13 +11,13 @@ pub async fn handle_models(app: &mut App, args: &str) {
         };
 
         let base_url = app
-            .available_providers
+            .modals.available_providers
             .iter()
             .find(|p| p.name == new_provider)
             .and_then(|p| p.default_base_url.clone());
 
         let model_str = new_model.as_deref().unwrap_or("default");
-        if let Err(e) = app.bridge.switch_model(&new_provider, Some(model_str), base_url.as_deref()).await {
+        if let Err(e) = app.connection.bridge.switch_model(&new_provider, Some(model_str), base_url.as_deref()).await {
             app.add_error_message(format!("Failed to switch model: {}", e));
             return;
         }
@@ -27,11 +27,11 @@ pub async fn handle_models(app: &mut App, args: &str) {
         if let Some(url) = base_url {
             app.base_url = Some(url);
         }
-        if let Ok(providers) = app.bridge.list_providers().await {
-            app.available_providers = providers;
+        if let Ok(providers) = app.connection.bridge.list_providers().await {
+            app.modals.available_providers = providers;
         }
-        if let Ok(models) = app.bridge.list_models(None).await {
-            app.model_list = models;
+        if let Ok(models) = app.connection.bridge.list_models(None).await {
+            app.modals.model_list = models;
         }
 
         // Save to config

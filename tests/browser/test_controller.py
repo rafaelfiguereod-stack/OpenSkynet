@@ -206,12 +206,14 @@ class TestBrowserControllerNotStarted:
     @pytest.mark.asyncio
     async def test_navigate_not_started(self, stopped_controller):
         result = await stopped_controller.navigate("https://example.com")
-        assert result == "Browser not started."
+        assert "Browser not started" in result
+        assert "Call start() first" in result
 
     @pytest.mark.asyncio
     async def test_click_not_started(self, stopped_controller):
         result = await stopped_controller.click(1)
-        assert result == "Browser not started."
+        assert "Browser not started" in result
+        assert "Call start() first" in result
 
     @pytest.mark.asyncio
     async def test_snapshot_not_started(self, stopped_controller):

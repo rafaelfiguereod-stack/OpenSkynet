@@ -12,14 +12,14 @@ const MENU_OPTIONS: &[&str] = &[
 
 /// Handle MemoryMenu modal key input.
 pub async fn handle_memory_menu(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
-    if let Some(AppModal::MemoryMenu { selected }) = &mut app.active_modal {
+    if let Some(AppModal::MemoryMenu { selected }) = &mut app.modals.active {
         match key.code {
             KeyCode::Esc | KeyCode::Char('q') => {
-                app.active_modal = None;
+                app.modals.active = None;
                 true
             }
             KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-                app.active_modal = None;
+                app.modals.active = None;
                 true
             }
             KeyCode::Up | KeyCode::Char('k') => {
@@ -38,8 +38,8 @@ pub async fn handle_memory_menu(app: &mut App, key: crossterm::event::KeyEvent) 
                 match *selected {
                     0 => {
                         // View Memory Entries (fetch and display stats/entries)
-                        app.active_modal = None;
-                        match app.bridge.memory_get_stats().await {
+                        app.modals.active = None;
+                        match app.connection.bridge.memory_get_stats().await {
                             Ok(stats) => {
                                 app.show_memory_stats(stats);
                             }
@@ -50,13 +50,13 @@ pub async fn handle_memory_menu(app: &mut App, key: crossterm::event::KeyEvent) 
                     }
                     1 => {
                         // Switch Memory System
-                        app.active_modal = None;
+                        app.modals.active = None;
                         app.open_memory_system_picker();
                     }
                     2 => {
                         // View Memory System Status
-                        app.active_modal = None;
-                        match app.bridge.memory_get_system().await {
+                        app.modals.active = None;
+                        match app.connection.bridge.memory_get_system().await {
                             Ok(system) => {
                                 app.add_system_message(format!("Current memory system: {}", system));
                             }
@@ -66,7 +66,7 @@ pub async fn handle_memory_menu(app: &mut App, key: crossterm::event::KeyEvent) 
                         }
                     }
                     _ => {
-                        app.active_modal = None;
+                        app.modals.active = None;
                     }
                 }
                 true

@@ -19,6 +19,10 @@ mod logging;
 mod gpu_app;
 mod config;
 mod updater;
+mod error;
+mod constants;
+#[allow(dead_code)]
+mod strings;
 
 #[derive(Parser, Debug)]
 #[command(name = "openskynet", about = "OpenSkynet — Your AI browser employee", version)]
@@ -360,10 +364,10 @@ fn apply_saved_config(app_state: &mut app::App, saved_config: &config::TuiConfig
         _ => app::SideTab::Status,
     };
     if !saved_config.coder_backend.is_empty() {
-        app_state.coder_backend = saved_config.coder_backend.clone();
+        app_state.agent.coder_backend = saved_config.coder_backend.clone();
     }
     if !saved_config.search_mode.is_empty() {
-        app_state.search_mode = saved_config.search_mode.clone();
+        app_state.agent.search_mode = saved_config.search_mode.clone();
     }
 }
 
@@ -401,13 +405,13 @@ async fn async_main(args: Args) {
     spawn_update_check_if_due(&saved_config);
 
     let mut app_state = app::App::new(provider.clone(), model.clone(), base_url.clone(), headless, bridge);
-    app_state.is_connected = false;
+    app_state.connection.is_connected = false;
 
     // Apply saved config
     apply_saved_config(&mut app_state, &saved_config);
 
     if !saved_config.onboarding_complete {
-        app_state.active_modal = Some(app::AppModal::OnboardingWizard { step: 0 });
+        app_state.modals.active = Some(app::AppModal::OnboardingWizard { step: 0 });
     }
 
     if args.resume && app_state.load_session() {

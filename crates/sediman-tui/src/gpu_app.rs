@@ -8,9 +8,8 @@ use std::sync::Arc;
 use sediman_tui_core::{
     event::AppEvent,
     renderer::CellBuffer,
+    renderer::gpu::{GpuRenderer, GpuRendererConfig},
 };
-#[cfg(feature = "gpu")]
-use sediman_tui_core::renderer::gpu::GpuRenderer;
 
 #[cfg(feature = "gpu")]
 use crate::update::handle_message;
@@ -25,17 +24,28 @@ use winit::{
 };
 
 #[cfg(feature = "gpu")]
+const DEFAULT_FONT_SIZE: f32 = 16.0;
+#[cfg(feature = "gpu")]
+const DEFAULT_WINDOW_WIDTH: u32 = 960;
+#[cfg(feature = "gpu")]
+const DEFAULT_WINDOW_HEIGHT: u32 = 600;
+#[cfg(feature = "gpu")]
+const SPINNER_TICK_INTERVAL: u64 = 3;
+
+#[cfg(feature = "gpu")]
+const FONT_SEARCH_PATHS: &[&str] = &[
+    "/System/Library/Fonts/Monaco.ttf",
+    "/System/Library/Fonts/Menlo.ttc",
+    "/System/Library/Fonts/SFMono-Regular.otf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
+    "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
+    "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
+    "C:\\Windows\\Fonts\\consola.ttf",
+];
+
+#[cfg(feature = "gpu")]
 fn load_system_font() -> Option<Vec<u8>> {
-    let candidates = [
-        "/System/Library/Fonts/Monaco.ttf",
-        "/System/Library/Fonts/Menlo.ttc",
-        "/System/Library/Fonts/SFMono-Regular.otf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf",
-        "/usr/share/fonts/TTF/DejaVuSansMono.ttf",
-        "/usr/share/fonts/truetype/liberation/LiberationMono-Regular.ttf",
-        "C:\\Windows\\Fonts\\consola.ttf",
-    ];
-    for path in &candidates {
+    for path in FONT_SEARCH_PATHS {
         if let Ok(data) = std::fs::read(path) {
             return Some(data);
         }
@@ -98,13 +108,13 @@ pub async fn run_gpu(app: App) -> Result<(), Box<dyn std::error::Error>> {
 
     let font_data = load_system_font().unwrap_or_default();
     if font_data.is_empty() {
-        error!("No monospace font found. Install one and try again.");
-        return Err("No font found".into());
+        error!("No monospace font found. Searched paths: {:?}", FONT_SEARCH_PATHS);
+        return Err("No monospace font found. Install one and try again.".into());
     }
 
     let event_loop = EventLoop::new()?;
     let rt = tokio::runtime::Handle::current();
-    let (event_tx, event_rx) = mpsc::unbounded_channel::<AppEvent>();
+    let (event_tx, event_rx) = mpsc::channel::<AppEvent>(1024);
 
     let mut handler = GpuAppHandler {
         app,
@@ -112,15 +122,12 @@ pub async fn run_gpu(app: App) -> Result<(), Box<dyn std::error::Error>> {
         buffer: CellBuffer::empty(),
         window: None,
         font_data,
-        font_size: 16.0,
-        cell_w: 9.6,
-        cell_h: 20.0,
+        needs_full_redraw: true,
         event_tx,
         event_rx,
         rt,
         tick: 0,
         mod_state: ModifiersState::empty(),
-        needs_full_redraw: true,
     };
 
     event_loop.run_app(&mut handler).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
@@ -133,15 +140,29 @@ struct GpuAppHandler {
     buffer: CellBuffer,
     window: Option<Arc<Window>>,
     font_data: Vec<u8>,
-    font_size: f32,
-    cell_w: f32,
-    cell_h: f32,
-    event_tx: tokio::sync::mpsc::UnboundedSender<AppEvent>,
+    needs_full_redraw: bool,
+    event_tx: tokio::sync::mpsc::Sender<AppEvent>,
     event_rx: tokio::sync::mpsc::UnboundedReceiver<AppEvent>,
     rt: tokio::runtime::Handle,
     tick: u64,
     mod_state: ModifiersState,
-    needs_full_redraw: bool,
+}
+
+#[cfg(feature = "gpu")]
+impl GpuAppHandler {
+    fn cell_dimensions(&self) -> (f32, f32) {
+        self.gpu
+            .as_ref()
+            .map(|g| g.cell_dimensions())
+            .unwrap_or((9.6, 20.0))
+    }
+
+    fn cols_rows_from_size(&self, width: u32, height: u32) -> (u16, u16) {
+        let (cell_w, cell_h) = self.cell_dimensions();
+        let cols = ((width as f32) / cell_w).floor() as u16;
+        let rows = ((height as f32) / cell_h).floor() as u16;
+        (cols.max(1), rows.max(1))
+    }
 }
 
 #[cfg(feature = "gpu")]
@@ -152,19 +173,26 @@ impl ApplicationHandler for GpuAppHandler {
                 event_loop
                     .create_window(
                         winit::window::WindowAttributes::default()
-                            .with_title("Sediman TUI (GPU)")
-                            .with_inner_size(winit::dpi::PhysicalSize::new(960, 600)),
+                            .with_title("Sediman TUI")
+                            .with_inner_size(winit::dpi::PhysicalSize::new(
+                                DEFAULT_WINDOW_WIDTH,
+                                DEFAULT_WINDOW_HEIGHT,
+                            )),
                     )
                     .expect("Failed to create GPU window — no display available"),
             );
             self.window = Some(win.clone());
 
             let sz = win.inner_size();
-            let cols = ((sz.width as f32) / self.cell_w).floor() as u16;
-            let rows = ((sz.height as f32) / self.cell_h).floor() as u16;
-            self.buffer = CellBuffer::new(cols.max(1), rows.max(1));
+            let (cols, rows) = self.cols_rows_from_size(sz.width, sz.height);
+            self.buffer = CellBuffer::new(cols, rows);
 
-            let gpu = pollster::block_on(GpuRenderer::new(win, &self.font_data, self.font_size));
+            let gpu_config = GpuRendererConfig {
+                font_size: DEFAULT_FONT_SIZE,
+                theme: self.app.theme.clone(),
+                ..Default::default()
+            };
+            let gpu = pollster::block_on(GpuRenderer::new(win, &self.font_data, gpu_config));
             self.gpu = Some(gpu);
             self.needs_full_redraw = true;
         }
@@ -173,30 +201,37 @@ impl ApplicationHandler for GpuAppHandler {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _id: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => { self.app.running = false; event_loop.exit(); }
+            WindowEvent::CloseRequested => {
+                self.app.agent.running = false;
+                event_loop.exit();
+            }
             WindowEvent::RedrawRequested => {
                 if let Some(ref mut gpu) = self.gpu {
+                    gpu.set_theme(&self.app.theme);
+
                     self.buffer.clear();
                     crate::view::render_into(&mut self.buffer, &mut self.app);
 
+                    let (cell_w, cell_h) = gpu.cell_dimensions();
                     if self.needs_full_redraw {
-                        gpu.full_redraw(&self.buffer, self.cell_w, self.cell_h).ok();
+                        gpu.full_redraw(&self.buffer, cell_w, cell_h).ok();
                         self.needs_full_redraw = false;
                     } else {
-                        gpu.render(&self.buffer, self.cell_w, self.cell_h).ok();
+                        gpu.render(&self.buffer, cell_w, cell_h).ok();
                     }
                 }
             }
             WindowEvent::Resized(sz) => {
                 if let Some(ref mut gpu) = self.gpu {
                     gpu.resize(sz.width, sz.height);
-                    let cols = ((sz.width as f32) / self.cell_w).floor() as u16;
-                    let rows = ((sz.height as f32) / self.cell_h).floor() as u16;
-                    self.buffer = CellBuffer::new(cols.max(1), rows.max(1));
+                    let (cols, rows) = self.cols_rows_from_size(sz.width, sz.height);
+                    self.buffer = CellBuffer::new(cols, rows);
                     self.needs_full_redraw = true;
                 }
             }
-            WindowEvent::ModifiersChanged(m) => { self.mod_state = m.state(); }
+            WindowEvent::ModifiersChanged(m) => {
+                self.mod_state = m.state();
+            }
             WindowEvent::KeyboardInput { event, .. } => {
                 if event.state == ElementState::Pressed {
                     if let Some(k) = map_winit_key(&event, &self.mod_state) {
@@ -205,7 +240,9 @@ impl ApplicationHandler for GpuAppHandler {
                             handle_message(&mut self.app, AppEvent::Key(k), &tx).await;
                         });
                         self.needs_full_redraw = true;
-                        if let Some(ref w) = self.window { w.request_redraw(); }
+                        if let Some(ref w) = self.window {
+                            w.request_redraw();
+                        }
                     }
                 }
             }
@@ -221,12 +258,17 @@ impl ApplicationHandler for GpuAppHandler {
             });
         }
         self.tick += 1;
-        if self.app.agent_running && self.tick % 3 == 0 {
+        if self.app.agent.running && self.tick % SPINNER_TICK_INTERVAL == 0 {
             self.app.advance_spinner();
             self.needs_full_redraw = true;
         }
-        if !self.app.running { event_loop.exit(); return; }
-        if let Some(ref w) = self.window { w.request_redraw(); }
+        if !self.app.agent.running {
+            event_loop.exit();
+            return;
+        }
+        if let Some(ref w) = self.window {
+            w.request_redraw();
+        }
     }
 }
 

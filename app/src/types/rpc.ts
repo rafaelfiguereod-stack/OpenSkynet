@@ -40,12 +40,17 @@ export type RPCMethod =
   | 'status.get';
 
 export interface StreamEvent {
-  type: 'chunk' | 'done' | 'error';
+  type: 'chunk' | 'done' | 'error' | 'progress';
   data: {
     delta?: string;
     finished?: boolean;
     error?: string;
     usage?: TokenUsage;
+    phase?: string;
+    action?: string;
+    step?: number;
+    url?: string;
+    detail?: string;
   };
 }
 

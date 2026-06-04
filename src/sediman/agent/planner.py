@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from typing import Callable
 
 import structlog
 
 logger = structlog.get_logger()
 
 
-def _daily_cron(m: re.Match) -> str:
+def _daily_cron(m: re.Match[str] | None) -> str:
+    """Convert daily time pattern to cron expression."""
+    if not m:
+        return "0 9 * * *"
+
     hour = int(m.group(1))
     minute = int(m.group(2)) if m.group(2) else 0
     ampm = (m.group(3) or "").lower()
@@ -19,35 +24,51 @@ def _daily_cron(m: re.Match) -> str:
     return f"{minute} {hour} * * *"
 
 
-def _cjk_minutes(m: re.Match) -> str:
+def _cjk_minutes(m: re.Match[str] | None) -> str:
+    """Convert CJK minutes pattern to cron expression."""
+    if not m:
+        return "*/1 * * * *"
     return f"*/{m.group(1)} * * * *"
 
 
-def _cjk_hours(m: re.Match) -> str:
+def _cjk_hours(m: re.Match[str] | None) -> str:
+    """Convert CJK hours pattern to cron expression."""
+    if not m:
+        return "0 */1 * * *"
     return f"0 */{m.group(1)} * * *"
 
 
-def _cjk_daily(_m: re.Match) -> str:
+def _cjk_daily(_m: re.Match[str] | None) -> str:
+    """Convert CJK daily pattern to cron expression."""
     return "0 9 * * *"
 
 
-def _cjk_hourly(_m: re.Match) -> str:
+def _cjk_hourly(_m: re.Match[str] | None) -> str:
+    """Convert CJK hourly pattern to cron expression."""
     return "0 * * * *"
 
 
-def _cjk_weekly(_m: re.Match) -> str:
+def _cjk_weekly(_m: re.Match[str] | None) -> str:
+    """Convert CJK weekly pattern to cron expression."""
     return "0 9 * * 1"
 
 
-def _monitor_cron(_m: re.Match) -> str:
+def _monitor_cron(_m: re.Match[str] | None) -> str:
+    """Convert monitor pattern to cron expression."""
     return "*/5 * * * *"
 
 
-def _n_minutes(m: re.Match) -> str:
+def _n_minutes(m: re.Match[str] | None) -> str:
+    """Convert N minutes pattern to cron expression."""
+    if not m:
+        return "*/1 * * * *"
     return f"*/{m.group(1)} * * * *"
 
 
-def _n_hours(m: re.Match) -> str:
+def _n_hours(m: re.Match[str] | None) -> str:
+    """Convert N hours pattern to cron expression."""
+    if not m:
+        return "0 */1 * * *"
     return f"0 */{m.group(1)} * * *"
 
 

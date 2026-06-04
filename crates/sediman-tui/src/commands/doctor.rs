@@ -11,7 +11,7 @@ pub static CMD_DOCTOR: Command = Command {
 
 pub async fn handle_doctor(app: &mut App, _args: &str) {
     let checks = run_all_checks_sync(app).await;
-    app.active_modal = Some(AppModal::Doctor {
+    app.modals.active = Some(AppModal::Doctor {
         checks,
         cursor: 0,
         scroll: 0,
@@ -24,10 +24,10 @@ pub async fn run_all_checks_sync(app: &App) -> Vec<DoctorCheck> {
     let mut checks = Vec::new();
 
     checks.extend(check_browser());
-    checks.extend(check_ai_llm(&app.bridge, &app.provider).await);
+    checks.extend(check_ai_llm(&app.connection.bridge, &app.provider).await);
     checks.extend(check_tools());
     checks.extend(check_python());
-    checks.extend(check_system(&app.bridge).await);
+    checks.extend(check_system(&app.connection.bridge).await);
 
     checks
 }

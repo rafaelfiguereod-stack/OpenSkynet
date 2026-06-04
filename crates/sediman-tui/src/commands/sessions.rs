@@ -3,13 +3,13 @@ use sediman_tui_core::command::{Command, CommandCategory};
 use crate::app::{App, AppModal};
 
 pub async fn handle_sessions(app: &mut App, _args: &str) {
-    match app.bridge.get_sessions().await {
+    match app.connection.bridge.get_sessions().await {
         Ok(sessions) => {
-            app.session_list = sessions;
-            app.session_selected = 0;
-            app.session_scroll = 0;
-            app.session_filter.clear();
-            app.active_modal = Some(AppModal::SessionBrowser);
+            app.modals.session_list = sessions;
+            app.modals.session_selected = 0;
+            app.modals.session_scroll = 0;
+            app.modals.session_filter.clear();
+            app.modals.active = Some(AppModal::SessionBrowser);
         }
         Err(e) => {
             app.add_error_message(format!("Failed to load sessions: {}", e));

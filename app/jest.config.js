@@ -16,14 +16,20 @@ export default {
   transform: {
     '^.+\\.(ts|tsx)$': ['ts-jest', {
       tsconfig: {
-        jsx: 'react-jsx',
+        jsx: 'react',
+        esModuleInterop: true,
+        allowSyntheticDefaultImports: true,
       },
     }],
   },
   transformIgnorePatterns: [
     '/node_modules/(?!(.+?/node_modules)?(@tauri-apps|@radix-ui|zustand|framer-motion|lucide-react|class-variance-authority|clsx|tailwind-merge|react-markdown|remark-gfm|rehype-highlight|sonner|cmdk))/',
   ],
-  moduleNameMapper: {
-    '^@/(.*)$': '<rootDir>/src/$1',
+  globals: {
+    'ts-jest': {
+      tsconfig: {
+        jsx: 'react',
+      },
+    },
   },
 };

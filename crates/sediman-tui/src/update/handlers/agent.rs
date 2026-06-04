@@ -1,44 +1,46 @@
 //! Agent task execution handler.
 
 use crate::app::App;
-use sediman_tui_core::event::AppEvent;
+use crate::constants::*;
+use crate::error::try_send;
+use sediman_tui_core::event::{AppEvent, AgentResultData, StreamingTokenData};
 use std::sync::Arc;
 use std::sync::atomic::AtomicBool;
 use tokio::io::{AsyncBufReadExt, AsyncReadExt, BufReader};
 use tokio::sync::mpsc;
 
 /// Execute an agent task.
-pub async fn handle_task(app: &mut App, task: &str, event_tx: &mpsc::UnboundedSender<AppEvent>) {
-    if app.agent_running {
+pub async fn handle_task(app: &mut App, task: &str, event_tx: &mpsc::Sender<AppEvent>) {
+    if app.agent.running {
         return;
     }
 
     // Route Terminator mode to the autonomous workflow
-    if app.agent_mode == crate::app::AgentMode::Terminator {
+    if app.agent.mode == crate::app::AgentMode::Terminator {
         handle_terminator_task(app, task, event_tx).await;
         return;
     }
 
     // Route Coder mode with external backend to subprocess
-    if app.agent_mode == crate::app::AgentMode::Coder && app.coder_backend != "internal" {
+    if app.agent.mode == crate::app::AgentMode::Coder && app.agent.coder_backend != "internal" {
         handle_coder_external(app, task, event_tx).await;
         return;
     }
 
-    let mode: String = match app.agent_mode {
+    let mode: String = match app.agent.mode {
         crate::app::AgentMode::Browser => "browser".into(),
         crate::app::AgentMode::Coder => "coder".into(),
         _ => app.current_mode_name().to_string(),
     };
 
     app.show_banner = false;
-    app.task_count += 1;
-    app.agent_running = true;
-    app.agent_start = std::time::Instant::now();
-    app.spinner_text = "Working...".to_string();
+    app.agent.task_count += 1;
+    app.agent.running = true;
+    app.agent.start = std::time::Instant::now();
+    app.agent.spinner_text = "Working...".to_string();
     app.interrupt.clear();
 
-    app.add_user_message(task.to_string(), app.task_count);
+    app.add_user_message(task.to_string(), app.agent.task_count);
     app.start_agent_message(task);
 
     let bridge_url = app.bridge_url().to_string();
@@ -55,15 +57,15 @@ pub async fn handle_task(app: &mut App, task: &str, event_tx: &mpsc::UnboundedSe
             Ok(Some(agent_result)) => {
                 let skill = agent_result.skill_created.clone();
                 let job = agent_result.scheduled_job_id.clone();
-                let _ = tx.send(AppEvent::AgentResult(
-                    agent_result.success,
-                    agent_result.result.clone(),
-                    elapsed,
-                    skill,
-                    job,
-                ));
+                try_send(&tx,AppEvent::AgentResult(AgentResultData {
+                    success: agent_result.success,
+                    text: agent_result.result.clone(),
+                    elapsed_secs: elapsed,
+                    skill_created: skill,
+                    scheduled_job: job,
+                }));
                 if agent_result.success {
-                    let _ = tx.send(AppEvent::CommandOutput(format!(
+                    try_send(&tx,AppEvent::CommandOutput(format!(
                         "Done ({}s){}{}",
                         elapsed,
                         agent_result.skill_created
@@ -78,26 +80,26 @@ pub async fn handle_task(app: &mut App, task: &str, event_tx: &mpsc::UnboundedSe
                 }
             }
             Ok(None) => {
-                let _ = tx.send(AppEvent::AgentError("No result received".into()));
+                try_send(&tx,AppEvent::AgentError("No result received".into()));
             }
             Err(e) => {
-                let _ = tx.send(AppEvent::AgentError(e.to_string()));
+                try_send(&tx,AppEvent::AgentError(e.to_string()));
             }
         }
-        let _ = tx.send(AppEvent::AgentDone);
+        try_send(&tx,AppEvent::AgentDone);
     });
 }
 
 /// Execute a Terminator mode task via the SystemOrchestrator backend.
-async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::UnboundedSender<AppEvent>) {
+async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::Sender<AppEvent>) {
     app.show_banner = false;
-    app.task_count += 1;
-    app.agent_running = true;
-    app.agent_start = std::time::Instant::now();
-    app.spinner_text = "◆ Terminator starting...".to_string();
+    app.agent.task_count += 1;
+    app.agent.running = true;
+    app.agent.start = std::time::Instant::now();
+    app.agent.spinner_text = "◆ Terminator starting...".to_string();
     app.interrupt.clear();
 
-    app.add_user_message(task.to_string(), app.task_count);
+    app.add_user_message(task.to_string(), app.agent.task_count);
     app.start_agent_message(task);
 
     let bridge_url = app.bridge_url().to_string();
@@ -106,7 +108,7 @@ async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::Unbo
     let interrupt_flag = app.interrupt.flag().clone();
     let start = std::time::Instant::now();
 
-    let _ = tx.send(AppEvent::AgentStep("terminator".into(), "◆ Terminator mode activated".into()));
+    try_send(&tx,AppEvent::AgentStep("terminator".into(), "◆ Terminator mode activated".into()));
 
     tokio::spawn(async move {
         let params = serde_json::json!({"task": task_owned});
@@ -130,7 +132,7 @@ async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::Unbo
                                 match ws_msg.msg_type.as_str() {
                                     "streaming" => {
                                         if let Some(ref st) = ws_msg.streaming_token {
-                                            let _ = tx.send(AppEvent::StreamingToken(st.token.clone(), st.phase.clone()));
+                                            try_send(&tx,AppEvent::StreamingToken(StreamingTokenData { token: st.token.clone(), phase: st.phase.clone() }));
                                         }
                                     }
                                     "step" => {
@@ -141,7 +143,7 @@ async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::Unbo
                                             if let Some(ref detail) = event.detail {
                                                 step_line.push_str(&format!("\n  {}", detail));
                                             }
-                                            let _ = tx.send(AppEvent::AgentStep(phase, step_line));
+                                            try_send(&tx,AppEvent::AgentStep(phase, step_line));
                                         }
                                     }
                                     "progress" => {
@@ -160,7 +162,7 @@ async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::Unbo
                                                         max as u32,
                                                         countdown as f32,
                                                     );
-                                                    let _ = tx.send(AppEvent::Progress(progress));
+                                                    try_send(&tx,AppEvent::Progress(progress));
                                                 }
                                             } else if let Some(validation_val) = data.get("validation") {
                                                 // Validation progress
@@ -173,13 +175,13 @@ async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::Unbo
                                                         confidence as f32,
                                                         issues as usize,
                                                     );
-                                                    let _ = tx.send(AppEvent::Progress(progress));
+                                                    try_send(&tx,AppEvent::Progress(progress));
                                                 }
                                             } else if data.get("reflection").is_some() {
                                                 // Reflection progress
                                                 use sediman_tui_core::event::ProgressData;
                                                 let progress = ProgressData::reflection();
-                                                let _ = tx.send(AppEvent::Progress(progress));
+                                                try_send(&tx,AppEvent::Progress(progress));
                                             }
                                         }
                                     }
@@ -197,7 +199,7 @@ async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::Unbo
                             None => break,
                         }
                     }
-                    _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(AGENT_POLL_INTERVAL_MS)) => {
                         if interrupt_flag.load(std::sync::atomic::Ordering::SeqCst) {
                             stream.cancel();
                             return Err("Interrupted by user".into());
@@ -212,35 +214,35 @@ async fn handle_terminator_task(app: &mut App, task: &str, event_tx: &mpsc::Unbo
         let elapsed = start.elapsed().as_secs();
         match stream_result {
             Ok(Some(agent_result)) => {
-                let _ = tx.send(AppEvent::AgentResult(
-                    agent_result.success,
-                    agent_result.result.clone(),
-                    elapsed,
-                    None,
-                    None,
-                ));
+                try_send(&tx,AppEvent::AgentResult(AgentResultData {
+                    success: agent_result.success,
+                    text: agent_result.result.clone(),
+                    elapsed_secs: elapsed,
+                    skill_created: None,
+                    scheduled_job: None,
+                }));
                 let icon = if agent_result.success { "✓" } else { "✗" };
-                let _ = tx.send(AppEvent::CommandOutput(format!(
+                try_send(&tx,AppEvent::CommandOutput(format!(
                     "{} Terminator finished ({})",
                     icon,
-                    if elapsed >= 60 { format!("{}m {}s", elapsed / 60, elapsed % 60) }
+                    if elapsed >= SECONDS_PER_MINUTE { format!("{}m {}s", elapsed / SECONDS_PER_MINUTE, elapsed % SECONDS_PER_MINUTE) }
                     else { format!("{}s", elapsed) }
                 )));
             }
             Ok(None) => {
-                let _ = tx.send(AppEvent::AgentError("No result received from Terminator.".into()));
+                try_send(&tx,AppEvent::AgentError("No result received from Terminator.".into()));
             }
             Err(e) => {
-                let _ = tx.send(AppEvent::AgentError(format!("Terminator error: {}", e)));
+                try_send(&tx,AppEvent::AgentError(format!("Terminator error: {}", e)));
             }
         }
-        let _ = tx.send(AppEvent::AgentDone);
+        try_send(&tx,AppEvent::AgentDone);
     });
 }
 
 /// Launch an external coder tool (claude-code, codex, opencode) as a subprocess.
-async fn handle_coder_external(app: &mut App, task: &str, event_tx: &mpsc::UnboundedSender<AppEvent>) {
-    let (cmd_name, args): (&str, Vec<String>) = match app.coder_backend.as_str() {
+async fn handle_coder_external(app: &mut App, task: &str, event_tx: &mpsc::Sender<AppEvent>) {
+    let (cmd_name, args): (&str, Vec<String>) = match app.agent.coder_backend.as_str() {
         "claude-code" => ("claude", vec!["--print".into(), task.into()]),
         "codex" => ("codex", vec!["-q".into(), task.into()]),
         "opencode" => ("opencode", vec!["-p".into(), task.into()]),
@@ -252,13 +254,13 @@ async fn handle_coder_external(app: &mut App, task: &str, event_tx: &mpsc::Unbou
 
     let cmd_name_owned = cmd_name.to_string();
     app.show_banner = false;
-    app.task_count += 1;
-    app.agent_running = true;
-    app.agent_start = std::time::Instant::now();
-    app.spinner_text = format!("Running {}...", cmd_name);
+    app.agent.task_count += 1;
+    app.agent.running = true;
+    app.agent.start = std::time::Instant::now();
+    app.agent.spinner_text = format!("Running {}...", cmd_name);
     app.interrupt.clear();
 
-    app.add_user_message(task.to_string(), app.task_count);
+    app.add_user_message(task.to_string(), app.agent.task_count);
     app.start_agent_message(task);
 
     let tx = event_tx.clone();
@@ -274,10 +276,10 @@ async fn handle_coder_external(app: &mut App, task: &str, event_tx: &mpsc::Unbou
         {
             Ok(c) => c,
             Err(e) => {
-                let _ = tx.send(AppEvent::AgentError(
+                try_send(&tx,AppEvent::AgentError(
                     format!("Failed to spawn {}: {}", cmd_name, e),
                 ));
-                let _ = tx.send(AppEvent::AgentDone);
+                try_send(&tx,AppEvent::AgentDone);
                 return;
             }
         };
@@ -297,13 +299,13 @@ async fn handle_coder_external(app: &mut App, task: &str, event_tx: &mpsc::Unbou
                     line = lines.next_line() => {
                         match line {
                             Ok(Some(text)) => {
-                                let _ = tx.send(AppEvent::StreamingToken(text, "responding".into()));
+                                try_send(&tx,AppEvent::StreamingToken(StreamingTokenData { token: text, phase: "responding".into() }));
                             }
                             Ok(None) => break,
                             Err(_) => break,
                         }
                     }
-                    _ = tokio::time::sleep(std::time::Duration::from_millis(100)) => {
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(AGENT_POLL_INTERVAL_MS)) => {
                         if interrupt_flag.load(std::sync::atomic::Ordering::SeqCst) {
                             let _ = child.kill().await;
                             break;
@@ -324,8 +326,8 @@ async fn handle_coder_external(app: &mut App, task: &str, event_tx: &mpsc::Unbou
 
         match status {
             Ok(s) if s.success() => {
-                let _ = tx.send(AppEvent::AgentResult(true, format!("{} done", cmd_name_owned), elapsed, None, None));
-                let _ = tx.send(AppEvent::CommandOutput(format!("{} done ({}s)", cmd_name_owned, elapsed)));
+                try_send(&tx,AppEvent::AgentResult(AgentResultData { success: true, text: format!("{} done", cmd_name_owned), elapsed_secs: elapsed, skill_created: None, scheduled_job: None }));
+                try_send(&tx,AppEvent::CommandOutput(format!("{} done ({}s)", cmd_name_owned, elapsed)));
             }
             Ok(s) => {
                 let err_msg = if stderr_text.is_empty() {
@@ -333,14 +335,14 @@ async fn handle_coder_external(app: &mut App, task: &str, event_tx: &mpsc::Unbou
                 } else {
                     format!("{} failed: {}", cmd_name_owned, stderr_text)
                 };
-                let _ = tx.send(AppEvent::AgentResult(false, err_msg.clone(), elapsed, None, None));
-                let _ = tx.send(AppEvent::CommandOutput(format!("{} failed ({}s): {}", cmd_name_owned, elapsed, stderr_text)));
+                try_send(&tx,AppEvent::AgentResult(AgentResultData { success: false, text: err_msg.clone(), elapsed_secs: elapsed, skill_created: None, scheduled_job: None }));
+                try_send(&tx,AppEvent::CommandOutput(format!("{} failed ({}s): {}", cmd_name_owned, elapsed, stderr_text)));
             }
             Err(e) => {
-                let _ = tx.send(AppEvent::AgentError(format!("Failed to launch {}: {}", cmd_name_owned, e)));
+                try_send(&tx,AppEvent::AgentError(format!("Failed to launch {}: {}", cmd_name_owned, e)));
             }
         }
-        let _ = tx.send(AppEvent::AgentDone);
+        try_send(&tx,AppEvent::AgentDone);
     });
 }
 
@@ -349,7 +351,7 @@ async fn run_agent_task_inner(
     bridge_url: &str,
     task: &str,
     mode: &str,
-    tx: &mpsc::UnboundedSender<AppEvent>,
+    tx: &mpsc::Sender<AppEvent>,
     interrupt_flag: &Arc<AtomicBool>,
 ) -> Result<Option<sediman_tui_bridge::AgentResult>, Box<dyn std::error::Error + Send + Sync>> {
     let params = serde_json::json!({"task": task, "mode": mode});
@@ -372,7 +374,7 @@ async fn run_agent_task_inner(
                         match ws_msg.msg_type.as_str() {
                             "streaming" => {
                                 if let Some(ref st) = ws_msg.streaming_token {
-                                    let _ = tx.send(AppEvent::StreamingToken(st.token.clone(), st.phase.clone()));
+                                    try_send(&tx,AppEvent::StreamingToken(StreamingTokenData { token: st.token.clone(), phase: st.phase.clone() }));
                                 }
                             }
                             "step" => {
@@ -386,7 +388,7 @@ async fn run_agent_task_inner(
                                     if let Some(ref detail) = event.detail {
                                         step_line.push_str(&format!("\n  {}", detail));
                                     }
-                                    let _ = tx.send(AppEvent::AgentStep(phase, step_line));
+                                    try_send(&tx,AppEvent::AgentStep(phase, step_line));
                                 }
                             }
                             "result" => {
@@ -431,8 +433,8 @@ mod tests {
         )
     }
 
-    fn test_event_tx() -> mpsc::UnboundedSender<AppEvent> {
-        let (tx, _rx) = mpsc::unbounded_channel();
+    fn test_event_tx() -> mpsc::Sender<AppEvent> {
+        let (tx, _rx) = mpsc::channel(1024);
         tx
     }
 
@@ -473,37 +475,37 @@ mod tests {
     #[tokio::test]
     async fn test_handle_task_returns_when_already_running() {
         let mut app = test_app();
-        app.agent_running = true;
+        app.agent.running = true;
         let tx = test_event_tx();
-        let initial_count = app.task_count;
+        let initial_count = app.agent.task_count;
         handle_task(&mut app, "test task", &tx).await;
-        assert_eq!(app.task_count, initial_count);
+        assert_eq!(app.agent.task_count, initial_count);
     }
 
     #[tokio::test]
     async fn test_handle_task_terminator_mode_sets_state() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Terminator;
+        app.agent.mode = AgentMode::Terminator;
         let tx = test_event_tx();
         handle_task(&mut app, "terminator task", &tx).await;
-        assert!(app.agent_running);
-        assert!(app.spinner_text.contains("Terminator"));
+        assert!(app.agent.running);
+        assert!(app.agent.spinner_text.contains("Terminator"));
     }
 
     #[tokio::test]
     async fn test_handle_task_terminator_mode_increments_count() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Terminator;
+        app.agent.mode = AgentMode::Terminator;
         let tx = test_event_tx();
-        let initial = app.task_count;
+        let initial = app.agent.task_count;
         handle_task(&mut app, "t task", &tx).await;
-        assert_eq!(app.task_count, initial + 1);
+        assert_eq!(app.agent.task_count, initial + 1);
     }
 
     #[tokio::test]
     async fn test_handle_task_terminator_mode_adds_user_message() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Terminator;
+        app.agent.mode = AgentMode::Terminator;
         let tx = test_event_tx();
         handle_task(&mut app, "msg test", &tx).await;
         assert!(!app.messages.is_empty());
@@ -512,33 +514,33 @@ mod tests {
     #[tokio::test]
     async fn test_handle_task_coder_external_mode_sets_state() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Coder;
-        app.coder_backend = "claude-code".into();
+        app.agent.mode = AgentMode::Coder;
+        app.agent.coder_backend = "claude-code".into();
         let tx = test_event_tx();
         handle_task(&mut app, "code task", &tx).await;
-        assert!(app.agent_running);
-        assert!(app.spinner_text.contains("claude"));
+        assert!(app.agent.running);
+        assert!(app.agent.spinner_text.contains("claude"));
     }
 
     #[tokio::test]
     async fn test_handle_task_coder_external_unknown_backend() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Coder;
-        app.coder_backend = "nonexistent".into();
+        app.agent.mode = AgentMode::Coder;
+        app.agent.coder_backend = "nonexistent".into();
         let tx = test_event_tx();
-        let initial = app.task_count;
+        let initial = app.agent.task_count;
         handle_task(&mut app, "bad backend", &tx).await;
-        assert_eq!(app.task_count, initial);
+        assert_eq!(app.agent.task_count, initial);
     }
 
     #[tokio::test]
     async fn test_handle_task_default_mode_sets_state() {
         let mut app = test_app();
-        assert!(matches!(app.agent_mode, AgentMode::Manager));
+        assert!(matches!(app.agent.mode, AgentMode::Manager));
         let tx = test_event_tx();
         handle_task(&mut app, "default task", &tx).await;
-        assert!(app.agent_running);
-        assert_eq!(app.spinner_text, "Working...");
+        assert!(app.agent.running);
+        assert_eq!(app.agent.spinner_text, "Working...");
     }
 
     #[tokio::test]
@@ -555,9 +557,9 @@ mod tests {
     async fn test_handle_task_default_increments_count() {
         let mut app = test_app();
         let tx = test_event_tx();
-        let initial = app.task_count;
+        let initial = app.agent.task_count;
         handle_task(&mut app, "count", &tx).await;
-        assert_eq!(app.task_count, initial + 1);
+        assert_eq!(app.agent.task_count, initial + 1);
     }
 
     // ── Coder external backend tests ───────────────────────────────
@@ -590,13 +592,13 @@ mod tests {
 
     #[test]
     fn test_agent_result_event_five_args() {
-        let event = AppEvent::AgentResult(true, "done".into(), 42, Some("skill".into()), None);
-        if let AppEvent::AgentResult(success, text, elapsed, skill, job) = event {
-            assert!(success);
-            assert_eq!(text, "done");
-            assert_eq!(elapsed, 42);
-            assert_eq!(skill, Some("skill".into()));
-            assert_eq!(job, None);
+        let event = AppEvent::AgentResult(AgentResultData { success: true, text: "done".into(), elapsed_secs: 42, skill_created: Some("skill".into()), scheduled_job: None });
+        if let AppEvent::AgentResult(data) = event {
+            assert!(data.success);
+            assert_eq!(data.text, "done");
+            assert_eq!(data.elapsed_secs, 42);
+            assert_eq!(data.skill_created, Some("skill".into()));
+            assert_eq!(data.scheduled_job, None);
         } else {
             panic!("Expected AgentResult variant");
         }
@@ -604,27 +606,27 @@ mod tests {
 
     #[test]
     fn test_agent_result_event_all_none() {
-        let event = AppEvent::AgentResult(false, "failed".into(), 5, None, None);
-        if let AppEvent::AgentResult(success, text, elapsed, skill, job) = event {
-            assert!(!success);
-            assert_eq!(text, "failed");
-            assert_eq!(elapsed, 5);
-            assert!(skill.is_none());
-            assert!(job.is_none());
+        let event = AppEvent::AgentResult(AgentResultData { success: false, text: "failed".into(), elapsed_secs: 5, skill_created: None, scheduled_job: None });
+        if let AppEvent::AgentResult(data) = event {
+            assert!(!data.success);
+            assert_eq!(data.text, "failed");
+            assert_eq!(data.elapsed_secs, 5);
+            assert!(data.skill_created.is_none());
+            assert!(data.scheduled_job.is_none());
         }
     }
 
     #[test]
     fn test_agent_result_event_with_job() {
-        let event = AppEvent::AgentResult(
-            true,
-            "scheduled".into(),
-            10,
-            None,
-            Some("job-123".into()),
-        );
-        if let AppEvent::AgentResult(_, _, _, _, job) = event {
-            assert_eq!(job, Some("job-123".into()));
+        let event = AppEvent::AgentResult(AgentResultData {
+            success: true,
+            text: "scheduled".into(),
+            elapsed_secs: 10,
+            skill_created: None,
+            scheduled_job: Some("job-123".into()),
+        });
+        if let AppEvent::AgentResult(data) = event {
+            assert_eq!(data.scheduled_job, Some("job-123".into()));
         }
     }
 
@@ -644,7 +646,7 @@ mod tests {
     async fn test_handle_task_terminator_clears_interrupt() {
         let mut app = test_app();
         app.interrupt.trigger();
-        app.agent_mode = AgentMode::Terminator;
+        app.agent.mode = AgentMode::Terminator;
         let tx = test_event_tx();
         handle_task(&mut app, "clear", &tx).await;
         assert!(!app.interrupt.is_triggered());
@@ -654,8 +656,8 @@ mod tests {
     async fn test_handle_task_coder_external_clears_interrupt() {
         let mut app = test_app();
         app.interrupt.trigger();
-        app.agent_mode = AgentMode::Coder;
-        app.coder_backend = "claude-code".into();
+        app.agent.mode = AgentMode::Coder;
+        app.agent.coder_backend = "claude-code".into();
         let tx = test_event_tx();
         handle_task(&mut app, "clear", &tx).await;
         assert!(!app.interrupt.is_triggered());
@@ -676,7 +678,7 @@ mod tests {
     async fn test_handle_task_terminator_hides_banner() {
         let mut app = test_app();
         app.show_banner = true;
-        app.agent_mode = AgentMode::Terminator;
+        app.agent.mode = AgentMode::Terminator;
         let tx = test_event_tx();
         handle_task(&mut app, "hide banner", &tx).await;
         assert!(!app.show_banner);
@@ -687,11 +689,11 @@ mod tests {
     #[tokio::test]
     async fn test_handle_task_enables_auto_scroll() {
         let mut app = test_app();
-        app.auto_scroll = false;
-        app.agent_mode = AgentMode::Terminator;
+        app.scroll.auto_scroll = false;
+        app.agent.mode = AgentMode::Terminator;
         let tx = test_event_tx();
         handle_task(&mut app, "scroll", &tx).await;
-        assert!(app.auto_scroll, "handle_task should enable auto_scroll");
+        assert!(app.scroll.auto_scroll, "handle_task should enable auto_scroll");
     }
 
     // ── Mode string mapping tests ────────────────────────────────
@@ -741,27 +743,27 @@ mod tests {
     #[tokio::test]
     async fn test_handle_task_browser_mode_sets_state() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Browser;
+        app.agent.mode = AgentMode::Browser;
         let tx = test_event_tx();
         handle_task(&mut app, "browse example.com", &tx).await;
-        assert!(app.agent_running);
+        assert!(app.agent.running);
         assert!(!app.show_banner);
     }
 
     #[tokio::test]
     async fn test_handle_task_browser_mode_increments_count() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Browser;
+        app.agent.mode = AgentMode::Browser;
         let tx = test_event_tx();
-        let initial = app.task_count;
+        let initial = app.agent.task_count;
         handle_task(&mut app, "browse", &tx).await;
-        assert_eq!(app.task_count, initial + 1);
+        assert_eq!(app.agent.task_count, initial + 1);
     }
 
     #[tokio::test]
     async fn test_handle_task_browser_mode_adds_user_message() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Browser;
+        app.agent.mode = AgentMode::Browser;
         let tx = test_event_tx();
         handle_task(&mut app, "go to https://example.com", &tx).await;
         assert!(!app.messages.is_empty());
@@ -770,7 +772,7 @@ mod tests {
     #[tokio::test]
     async fn test_handle_task_browser_mode_clears_interrupt() {
         let mut app = test_app();
-        app.agent_mode = AgentMode::Browser;
+        app.agent.mode = AgentMode::Browser;
         app.interrupt.trigger();
         let tx = test_event_tx();
         handle_task(&mut app, "browse", &tx).await;
@@ -810,23 +812,23 @@ mod tests {
     #[test]
     fn test_cycle_agent_mode_cycles_through_all() {
         let mut app = test_app();
-        assert_eq!(app.current_mode_index, 0);
+        assert_eq!(app.agent.current_mode_index, 0);
         assert_eq!(app.current_mode_label(), "Mgr");
 
         app.cycle_agent_mode();
-        assert_eq!(app.current_mode_index, 1);
+        assert_eq!(app.agent.current_mode_index, 1);
         assert_eq!(app.current_mode_label(), "Brow");
 
         app.cycle_agent_mode();
-        assert_eq!(app.current_mode_index, 2);
+        assert_eq!(app.agent.current_mode_index, 2);
         assert_eq!(app.current_mode_label(), "Code");
 
         app.cycle_agent_mode();
-        assert_eq!(app.current_mode_index, 3);
+        assert_eq!(app.agent.current_mode_index, 3);
         assert_eq!(app.current_mode_label(), "Term");
 
         app.cycle_agent_mode();
-        assert_eq!(app.current_mode_index, 0);
+        assert_eq!(app.agent.current_mode_index, 0);
         assert_eq!(app.current_mode_label(), "Mgr");
     }
 
@@ -834,27 +836,27 @@ mod tests {
     fn test_sync_agent_mode_sets_correct_enum() {
         let mut app = test_app();
 
-        app.current_mode_index = 0;
+        app.agent.current_mode_index = 0;
         app.sync_agent_mode();
-        assert!(matches!(app.agent_mode, AgentMode::Manager));
+        assert!(matches!(app.agent.mode, AgentMode::Manager));
 
-        app.current_mode_index = 1;
+        app.agent.current_mode_index = 1;
         app.sync_agent_mode();
-        assert!(matches!(app.agent_mode, AgentMode::Browser));
+        assert!(matches!(app.agent.mode, AgentMode::Browser));
 
-        app.current_mode_index = 2;
+        app.agent.current_mode_index = 2;
         app.sync_agent_mode();
-        assert!(matches!(app.agent_mode, AgentMode::Coder));
+        assert!(matches!(app.agent.mode, AgentMode::Coder));
 
-        app.current_mode_index = 3;
+        app.agent.current_mode_index = 3;
         app.sync_agent_mode();
-        assert!(matches!(app.agent_mode, AgentMode::Terminator));
+        assert!(matches!(app.agent.mode, AgentMode::Terminator));
     }
 
     #[test]
     fn test_set_agent_modes_preserves_current() {
         let mut app = test_app();
-        app.current_mode_index = 2; // coder
+        app.agent.current_mode_index = 2; // coder
 
         let new_modes = vec![
             crate::app::AgentModeEntry {
@@ -882,23 +884,23 @@ mod tests {
         app.set_agent_modes(new_modes);
 
         // "coder" was the current mode, should be preserved
-        assert_eq!(app.current_mode_index, 1);
+        assert_eq!(app.agent.current_mode_index, 1);
         assert_eq!(app.current_mode_label(), "Code");
-        assert!(matches!(app.agent_mode, AgentMode::Coder));
+        assert!(matches!(app.agent.mode, AgentMode::Coder));
     }
 
     #[test]
     fn test_set_agent_modes_empty_falls_back_to_defaults() {
         let mut app = test_app();
-        app.current_mode_index = 2;
+        app.agent.current_mode_index = 2;
         app.set_agent_modes(vec![]);
-        assert_eq!(app.agent_modes.len(), 4);
+        assert_eq!(app.agent.modes.len(), 4);
     }
 
     #[test]
     fn test_set_agent_modes_unknown_mode_resets_to_zero() {
         let mut app = test_app();
-        app.current_mode_index = 3; // terminator
+        app.agent.current_mode_index = 3; // terminator
 
         let new_modes = vec![
             crate::app::AgentModeEntry {
@@ -912,7 +914,7 @@ mod tests {
         app.set_agent_modes(new_modes);
 
         // "terminator" not found in new modes -> index 0
-        assert_eq!(app.current_mode_index, 0);
+        assert_eq!(app.agent.current_mode_index, 0);
         assert_eq!(app.current_mode_name(), "frontend");
     }
 

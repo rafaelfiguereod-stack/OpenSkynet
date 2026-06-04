@@ -87,7 +87,7 @@ impl Color {
     }
 
     pub fn from_hex(hex: &str) -> Option<Self> {
-        let hex = hex.trim_start_matches('#');
+        let hex = hex.trim().trim_start_matches('#');
         if hex.len() != 6 {
             return None;
         }
@@ -381,7 +381,7 @@ mod tests {
     #[test]
     fn test_from_hex_whitespace() {
         let c = Color::from_hex("  #ff0000  ");
-        assert!(c.is_none());
+        assert_eq!(c, Some(Color::from_rgb(255, 0, 0)));
     }
 
     #[test]

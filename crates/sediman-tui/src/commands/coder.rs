@@ -11,16 +11,16 @@ pub async fn handle_coder(app: &mut App, args: &str) {
 
     if input.is_empty() {
         // Open picker, pre-select current backend
-        app.coder_picker_selected = VALID_BACKENDS.iter()
-            .position(|&b| b == app.coder_backend)
+        app.modals.coder_picker_selected = VALID_BACKENDS.iter()
+            .position(|&b| b == app.agent.coder_backend)
             .unwrap_or(0);
-        app.active_modal = Some(crate::app::AppModal::CoderPicker);
+        app.modals.active = Some(crate::app::AppModal::CoderPicker);
         return;
     }
 
     if VALID_BACKENDS.contains(&input.as_str()) {
-        let old = app.coder_backend.clone();
-        app.coder_backend = input.clone();
+        let old = app.agent.coder_backend.clone();
+        app.agent.coder_backend = input.clone();
         app.add_system_message(format!(
             "Coder backend: {} → {}",
             old, input
@@ -28,7 +28,7 @@ pub async fn handle_coder(app: &mut App, args: &str) {
         // Persist
         let config = crate::config::TuiConfig::load();
         let mut config = config;
-        config.coder_backend = app.coder_backend.clone();
+        config.coder_backend = app.agent.coder_backend.clone();
         if let Err(e) = config.save() {
             app.add_error_message(format!("Failed to save config: {}", e));
         }

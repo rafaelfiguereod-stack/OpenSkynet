@@ -7,28 +7,28 @@ use crossterm::event::{KeyCode, KeyModifiers};
 pub async fn handle_api_key_prompt(app: &mut App, key: crossterm::event::KeyEvent) -> bool {
     match key.code {
         KeyCode::Esc => {
-            app.api_key_input.clear();
-            app.connect_target = None;
-            app.connect_is_integration = false;
-            app.connect_pending_model = None;
-            app.active_modal = None;
+            app.modals.api_key_input.clear();
+            app.modals.connect_target = None;
+            app.modals.connect_is_integration = false;
+            app.modals.connect_pending_model = None;
+            app.modals.active = None;
             true
         }
         KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
-            app.api_key_input.clear();
-            app.connect_target = None;
-            app.connect_is_integration = false;
-            app.connect_pending_model = None;
-            app.active_modal = None;
+            app.modals.api_key_input.clear();
+            app.modals.connect_target = None;
+            app.modals.connect_is_integration = false;
+            app.modals.connect_pending_model = None;
+            app.modals.active = None;
             true
         }
         KeyCode::Enter => {
-            if !app.api_key_input.is_empty() {
-                let target = app.connect_target.clone().unwrap_or_default();
-                let key_val = app.api_key_input.clone();
+            if !app.modals.api_key_input.is_empty() {
+                let target = app.modals.connect_target.clone().unwrap_or_default();
+                let key_val = app.modals.api_key_input.clone();
 
-                if app.connect_is_integration {
-                    match app.bridge.configure_integration(
+                if app.modals.connect_is_integration {
+                    match app.connection.bridge.configure_integration(
                         &target,
                         serde_json::json!({
                             "token": key_val,
@@ -53,16 +53,16 @@ pub async fn handle_api_key_prompt(app: &mut App, key: crossterm::event::KeyEven
                         }
                     }
                 } else {
-                    match app.bridge.auth_set(&target, &key_val).await {
+                    match app.connection.bridge.auth_set(&target, &key_val).await {
                         Ok(()) => {
-                            let pending_model = app.connect_pending_model.clone();
+                            let pending_model = app.modals.connect_pending_model.clone();
                             let base_url = app
-                                .available_providers
+                                .modals.available_providers
                                 .iter()
                                 .find(|p| p.name == target)
                                 .and_then(|p| p.default_base_url.clone());
                             let model_id = pending_model.as_deref().unwrap_or("default");
-                            if let Err(e) = app.bridge.switch_model(
+                            if let Err(e) = app.connection.bridge.switch_model(
                                 &target,
                                 Some(model_id),
                                 base_url.as_deref(),
@@ -76,11 +76,11 @@ pub async fn handle_api_key_prompt(app: &mut App, key: crossterm::event::KeyEven
                                 }
                                 app.add_system_message(format!("Switched to {}", app.display_model_id()));
                             }
-                            if let Ok(providers) = app.bridge.list_providers().await {
-                                app.available_providers = providers;
+                            if let Ok(providers) = app.connection.bridge.list_providers().await {
+                                app.modals.available_providers = providers;
                             }
-                            if let Ok(models) = app.bridge.list_models(None).await {
-                                app.model_list = models;
+                            if let Ok(models) = app.connection.bridge.list_models(None).await {
+                                app.modals.model_list = models;
                             }
                         }
                         Err(e) => {
@@ -89,23 +89,23 @@ pub async fn handle_api_key_prompt(app: &mut App, key: crossterm::event::KeyEven
                     }
                 }
             }
-            app.api_key_input.clear();
-            app.connect_target = None;
-            app.connect_is_integration = false;
-            app.connect_pending_model = None;
-            app.model_dialog_filter.clear();
-            app.active_modal = None;
+            app.modals.api_key_input.clear();
+            app.modals.connect_target = None;
+            app.modals.connect_is_integration = false;
+            app.modals.connect_pending_model = None;
+            app.modals.model_dialog_filter.clear();
+            app.modals.active = None;
             true
         }
         KeyCode::Backspace | KeyCode::Delete => {
-            app.api_key_input.pop();
+            app.modals.api_key_input.pop();
             true
         }
         KeyCode::Tab => {
             true
         }
         KeyCode::Char(c) => {
-            app.api_key_input.push(c);
+            app.modals.api_key_input.push(c);
             true
         }
         _ => false,

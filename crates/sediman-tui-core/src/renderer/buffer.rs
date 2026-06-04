@@ -285,64 +285,50 @@ impl CellBuffer {
     }
 
     pub fn clear(&mut self) {
-        for c in &mut self.cells {
-            c.clear();
+        self.fill(self.area, Cell::EMPTY);
+    }
+
+    fn for_each_cell_in_rect(&mut self, rect: Rect, mut f: impl FnMut(&mut Cell)) {
+        let clamped = rect.clamp(self.area);
+        if clamped.width == 0 || clamped.height == 0 {
+            return;
         }
-        let _ = &mut self.dirty_rows;
-        for d in &mut self.dirty_rows {
-            *d = true;
+        let w = self.area.width as usize;
+        let cw = clamped.width as usize;
+        let row_end = clamped.bottom().min(self.area.height) as usize;
+        for row in clamped.y as usize..row_end {
+            let start = row * w + clamped.x as usize;
+            for i in start..start + cw {
+                f(&mut self.cells[i]);
+            }
+            self.dirty_rows[row] = true;
         }
     }
 
     pub fn fill(&mut self, rect: Rect, cell: Cell) {
-        let clamped = rect.clamp(self.area);
-        if clamped.width == 0 || clamped.height == 0 {
-            return;
-        }
-        let w = self.area.width as usize;
-        let cw = clamped.width as usize;
-        let row_end = clamped.bottom().min(self.area.height) as usize;
-        for row in clamped.y as usize..row_end {
-            let start = row * w + clamped.x as usize;
-            for i in start..start + cw {
-                self.cells[i] = cell;
-            }
-            self.dirty_rows[row] = true;
-        }
+        self.for_each_cell_in_rect(rect, |c| *c = cell);
     }
 
     pub fn fill_style(&mut self, rect: Rect, style: super::Style) {
-        let clamped = rect.clamp(self.area);
-        if clamped.width == 0 || clamped.height == 0 {
-            return;
-        }
-        let w = self.area.width as usize;
-        let cw = clamped.width as usize;
-        let row_end = clamped.bottom().min(self.area.height) as usize;
-        for row in clamped.y as usize..row_end {
-            let start = row * w + clamped.x as usize;
-            for i in start..start + cw {
-                self.cells[i].style = style;
-            }
-            self.dirty_rows[row] = true;
-        }
+        self.for_each_cell_in_rect(rect, |c| c.style = style);
     }
 
     pub fn clear_rect(&mut self, rect: Rect) {
-        let clamped = rect.clamp(self.area);
-        if clamped.width == 0 || clamped.height == 0 {
-            return;
+        self.fill(rect, Cell::EMPTY);
+    }
+
+    fn write_char_at(&mut self, cx: u16, y: u16, ch: char, w: u16, right: u16, style: super::Style) {
+        if let Some(i) = self.index(cx, y) {
+            self.cells[i] = Cell::new(ch, style);
         }
-        let w = self.area.width as usize;
-        let cw = clamped.width as usize;
-        let empty = Cell::EMPTY;
-        let row_end = clamped.bottom().min(self.area.height) as usize;
-        for row in clamped.y as usize..row_end {
-            let start = row * w + clamped.x as usize;
-            for i in start..start + cw {
-                self.cells[i] = empty;
+        let mut cx = cx + 1;
+        for _ in 1..w {
+            if cx < right {
+                if let Some(i) = self.index(cx, y) {
+                    self.cells[i].skip = true;
+                }
             }
-            self.dirty_rows[row] = true;
+            cx += 1;
         }
     }
 
@@ -354,18 +340,8 @@ impl CellBuffer {
             if cx + w > self.area.width || y >= self.area.height {
                 break;
             }
-            if let Some(i) = self.index(cx, y) {
-                self.cells[i] = Cell::new(ch, style);
-            }
-            cx += 1;
-            for _ in 1..w {
-                if cx < self.area.width {
-                    if let Some(i) = self.index(cx, y) {
-                        self.cells[i].skip = true;
-                    }
-                }
-                cx += 1;
-            }
+            self.write_char_at(cx, y, ch, w, self.area.width, style);
+            cx += w;
         }
         self.mark_dirty(y);
     }
@@ -383,18 +359,8 @@ impl CellBuffer {
                 break;
             }
             if cx >= clip.x {
-                if let Some(i) = self.index(cx, y) {
-                    self.cells[i] = Cell::new(ch, style);
-                }
-                cx += 1;
-                for _ in 1..w {
-                    if cx < right {
-                        if let Some(i) = self.index(cx, y) {
-                            self.cells[i].skip = true;
-                        }
-                    }
-                    cx += 1;
-                }
+                self.write_char_at(cx, y, ch, w, right, style);
+                cx += w;
             } else {
                 cx += w;
             }
@@ -428,18 +394,8 @@ impl CellBuffer {
                     break;
                 }
             }
-            if let Some(i) = self.index(x, y) {
-                self.cells[i] = Cell::new(ch, style);
-            }
-            x += 1;
-            for _ in 1..w {
-                if x < clamped.right() {
-                    if let Some(i) = self.index(x, y) {
-                        self.cells[i].skip = true;
-                    }
-                }
-                x += 1;
-            }
+            self.write_char_at(x, y, ch, w, clamped.right(), style);
+            x += w;
         }
         if y < clamped.bottom() {
             self.mark_dirty(y);

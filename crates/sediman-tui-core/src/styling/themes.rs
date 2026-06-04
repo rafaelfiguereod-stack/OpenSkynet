@@ -1,4 +1,4 @@
-use super::theme::{Theme, ThemeColors, parse_hex};
+use super::theme::{Theme, ThemeColors};
 use crate::renderer::Color;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -150,8 +150,8 @@ pub fn load_theme_from_json(data: &str) -> Option<Theme> {
         match val {
             serde_json::Value::String(s) => {
                 if s == "none" { return None; }
-                if let Some(resolved) = defs.get(s) { return parse_hex(resolved); }
-                parse_hex(s)
+                if let Some(resolved) = defs.get(s) { return Color::from_hex(resolved); }
+                Color::from_hex(s)
             }
             serde_json::Value::Number(n) => Some(Color::from_rgb(n.as_u64()? as u8, n.as_u64()? as u8, n.as_u64()? as u8)),
             _ => None,

@@ -11,6 +11,7 @@ import os
 import uuid
 from dataclasses import dataclass
 from datetime import timedelta
+from enum import Enum
 from typing import Any
 
 import structlog
@@ -29,6 +30,16 @@ from sediman.config import (
 logger = structlog.get_logger()
 
 
+class SandboxErrorType(Enum):
+    """Types of sandbox errors for better error handling."""
+    CREATION_FAILED = "creation_failed"
+    EXECUTION_FAILED = "execution_failed"
+    TIMEOUT = "timeout"
+    NETWORK_ERROR = "network_error"
+    RESOURCE_ERROR = "resource_error"
+    UNKNOWN = "unknown"
+
+
 @dataclass
 class SandboxResult:
     success: bool
@@ -36,6 +47,9 @@ class SandboxResult:
     exit_code: int
     timed_out: bool = False
     sandboxed: bool = True
+    error_type: SandboxErrorType | None = None
+    error_message: str | None = None
+    retryable: bool = False
 
 
 def _build_connection_config() -> Any:
@@ -106,11 +120,36 @@ class SandboxRunner:
                 image=OPENSANDBOX_IMAGE,
             )
             return sb
+        except ConnectionRefusedError as e:
+            self._available = False
+            logger.warning(
+                "opensandbox_connection_refused",
+                error=str(e),
+                message="OpenSandbox server not running. Falling back to raw subprocess.",
+            )
+            return None
+        except TimeoutError as e:
+            self._available = False
+            logger.warning(
+                "opensandbox_creation_timeout",
+                error=str(e),
+                message="Sandbox creation timed out. Falling back to raw subprocess.",
+            )
+            return None
+        except ImportError as e:
+            self._available = False
+            logger.warning(
+                "opensandbox_import_failed",
+                error=str(e),
+                message="OpenSandbox SDK not installed. Falling back to raw subprocess.",
+            )
+            return None
         except Exception as e:
             self._available = False
             logger.warning(
                 "opensandbox_unavailable",
                 error=str(e),
+                error_type=type(e).__name__,
                 message="Falling back to raw subprocess. Install Docker and start opensandbox-server.",
             )
             return None
@@ -158,20 +197,68 @@ class SandboxRunner:
         except asyncio.TimeoutError:
             return SandboxResult(
                 success=False,
-                output=f"Sandbox timed out after {timeout}s",
+                output=f"Sandbox command timed out after {timeout}s. Consider increasing timeout or breaking into smaller steps.",
                 exit_code=124,
                 timed_out=True,
                 sandboxed=True,
+                error_type=SandboxErrorType.TIMEOUT,
+                error_message="Command execution exceeded timeout limit",
+                retryable=True,
             )
-        except Exception as e:
-            logger.warning("opensandbox_run_failed", command=command[:80], error=str(e))
+        except ConnectionRefusedError as e:
+            logger.warning("opensandbox_connection_lost", command=command[:80], error=str(e))
             self._sandbox = None
             self._available = None
             return SandboxResult(
                 success=False,
-                output=f"Sandbox error: {e}",
+                output=f"Sandbox connection lost: {e}. Retrying may work if connection is reestablished.",
                 exit_code=1,
                 sandboxed=True,
+                error_type=SandboxErrorType.NETWORK_ERROR,
+                error_message="Connection to sandbox server lost",
+                retryable=True,
+            )
+        except OSError as e:
+            logger.warning("opensandbox_resource_error", command=command[:80], error=str(e))
+            self._sandbox = None
+            self._available = None
+            return SandboxResult(
+                success=False,
+                output=f"Sandbox resource error: {e}. This may indicate insufficient resources or permissions.",
+                exit_code=1,
+                sandboxed=True,
+                error_type=SandboxErrorType.RESOURCE_ERROR,
+                error_message="Resource or permission error in sandbox",
+                retryable=False,
+            )
+        except Exception as e:
+            error_type_str = type(e).__name__
+            logger.warning(
+                "opensandbox_run_failed",
+                command=command[:80],
+                error=str(e),
+                error_type=error_type_str,
+            )
+            self._sandbox = None
+            self._available = None
+
+            # Classify error type for better handling
+            error_type = SandboxErrorType.UNKNOWN
+            if "timeout" in str(e).lower():
+                error_type = SandboxErrorType.TIMEOUT
+            elif "connection" in str(e).lower():
+                error_type = SandboxErrorType.NETWORK_ERROR
+            elif "resource" in str(e).lower() or "memory" in str(e).lower():
+                error_type = SandboxErrorType.RESOURCE_ERROR
+
+            return SandboxResult(
+                success=False,
+                output=f"Sandbox execution failed: {e}. The sandbox state has been reset, retry may work.",
+                exit_code=1,
+                sandboxed=True,
+                error_type=error_type,
+                error_message=str(e),
+                retryable=True,
             )
 
     async def _run_fallback(
@@ -212,33 +299,111 @@ class SandboxRunner:
         except asyncio.TimeoutError:
             return SandboxResult(
                 success=False,
-                output=f"Command timed out after {timeout}s",
+                output=f"Command timed out after {timeout}s. Consider increasing timeout or breaking into smaller steps.",
                 exit_code=124,
                 timed_out=True,
                 sandboxed=False,
+                error_type=SandboxErrorType.TIMEOUT,
+                error_message="Command execution exceeded timeout limit",
+                retryable=True,
             )
         except (OSError, asyncio.CancelledError) as e:
-            logger.error("terminal_execution_error", command=command[:80], error=str(e))
+            error_type_str = type(e).__name__
+            logger.error(
+                "terminal_execution_error",
+                command=command[:80],
+                error=str(e),
+                error_type=error_type_str,
+            )
+
+            # Classify the error for better handling
+            error_type = SandboxErrorType.RESOURCE_ERROR
+            error_message = str(e)
+            retryable = False
+
+            if isinstance(e, asyncio.CancelledError):
+                error_type = SandboxErrorType.UNKNOWN
+                error_message = "Command execution was cancelled"
+                retryable = True
+            elif "Permission denied" in error_message or "PermissionError" in error_message:
+                error_type = SandboxErrorType.RESOURCE_ERROR
+                error_message = f"Permission denied: {e}"
+                retryable = False
+            elif "No such file" in error_message or "FileNotFoundError" in error_message:
+                error_type = SandboxErrorType.RESOURCE_ERROR
+                error_message = f"Command or file not found: {e}"
+                retryable = False
+            elif "Too many open files" in error_message:
+                error_type = SandboxErrorType.RESOURCE_ERROR
+                error_message = f"System resource limit reached: {e}"
+                retryable = False
+
             return SandboxResult(
                 success=False,
-                output=f"Command failed: {e}",
+                output=f"Command execution failed: {error_message}",
                 exit_code=1,
                 sandboxed=False,
+                error_type=error_type,
+                error_message=error_message,
+                retryable=retryable,
+            )
+        except Exception as e:
+            logger.error(
+                "terminal_unexpected_error",
+                command=command[:80],
+                error=str(e),
+                error_type=type(e).__name__,
+            )
+            return SandboxResult(
+                success=False,
+                output=f"Unexpected error during command execution: {e}",
+                exit_code=1,
+                sandboxed=False,
+                error_type=SandboxErrorType.UNKNOWN,
+                error_message=str(e),
+                retryable=False,
             )
 
     async def get_sandbox(self) -> Any | None:
         return await self._ensure_sandbox()
 
     async def close(self) -> None:
+        """Close the sandbox and clean up resources.
+
+        Handles cleanup errors gracefully to ensure resources are always released.
+        """
         if self._sandbox is not None:
+            sandbox_id = self._sandbox_id
             try:
                 await self._sandbox.kill()
-                await self._sandbox.close()
-                logger.info("opensandbox_killed", sandbox_id=self._sandbox_id)
+                logger.info("opensandbox_killed", sandbox_id=sandbox_id)
+            except ConnectionRefusedError as e:
+                logger.warning(
+                    "opensandbox_kill_connection_refused",
+                    sandbox_id=sandbox_id,
+                    error=str(e),
+                )
+            except TimeoutError as e:
+                logger.warning(
+                    "opensandbox_kill_timeout",
+                    sandbox_id=sandbox_id,
+                    error=str(e),
+                )
             except Exception as e:
-                logger.debug("opensandbox_close_error", error=str(e))
+                logger.warning(
+                    "opensandbox_kill_failed",
+                    sandbox_id=sandbox_id,
+                    error=str(e),
+                    error_type=type(e).__name__,
+                )
             finally:
-                self._sandbox = None
+                try:
+                    await self._sandbox.close()
+                except Exception as e:
+                    logger.debug("opensandbox_close_error", error=str(e))
+                finally:
+                    self._sandbox = None
+                    self._sandbox_id = None
                 self._sandbox_id = None
 
     @property

@@ -1,99 +1,14 @@
 use sediman_tui_core::renderer::{CellBuffer, Rect, Style, TextAttributes, display_width, truncate_str};
-use sediman_tui_core::renderer::Color;
+use sediman_tui_core::component::{ModalFrame, InputRowConfig, draw_rounded_border, fill_area, draw_input_row};
 use crate::app::{App, AppModal, ModalLineStyle};
-
-struct ModalFrame {
-    modal: Rect,
-    inner_x: u16,
-    inner_w: usize,
-}
-
-impl ModalFrame {
-    fn new(buf: &mut CellBuffer, area: Rect, app: &App, modal_w: u16, modal_h: u16) -> Self {
-        let t = &app.theme;
-        let modal_x = area.x + (area.width.saturating_sub(modal_w)) / 2;
-        let modal_y = area.y + (area.height.saturating_sub(modal_h)) / 2;
-        let modal = Rect::new(modal_x, modal_y, modal_w, modal_h);
-
-        dim_background(buf, area, t.background_darker, t.text_muted);
-        fill_modal_bg(buf, modal, t.background, t.text);
-
-        Self {
-            modal,
-            inner_x: modal.x + 2,
-            inner_w: modal.width.saturating_sub(4) as usize,
-        }
-    }
-
-    fn draw_border(&self, buf: &mut CellBuffer, top_style: Style, bottom_style: Style) {
-        draw_modal_border(buf, self.modal, top_style, bottom_style);
-    }
-
-    fn draw_title(&self, buf: &mut CellBuffer, title: &str, style: Style) {
-        buf.draw_str(self.modal.x + 2, self.modal.y, title, style);
-    }
-
-    fn draw_close_hint(&self, buf: &mut CellBuffer, hint: &str, style: Style) {
-        let x = self.modal.right().saturating_sub(display_width(hint) + 2);
-        buf.draw_str(x, self.modal.y, hint, style);
-    }
-}
-
-pub fn draw_modal_border(buf: &mut CellBuffer, modal: Rect, top_style: Style, bottom_style: Style) {
-    buf.put_char(modal.x, modal.y, '\u{250c}', top_style);
-    buf.put_char(modal.right() - 1, modal.y, '\u{2510}', top_style);
-    buf.put_char(modal.x, modal.bottom() - 1, '\u{2514}', bottom_style);
-    buf.put_char(modal.right() - 1, modal.bottom() - 1, '\u{2518}', bottom_style);
-    for sx in (modal.x + 1)..(modal.right() - 1) {
-        buf.put_char(sx, modal.y, '\u{2500}', top_style);
-        buf.put_char(sx, modal.bottom() - 1, '\u{2500}', bottom_style);
-    }
-    for sy in (modal.y + 1)..(modal.bottom() - 1) {
-        buf.put_char(modal.x, sy, '\u{2502}', top_style);
-        buf.put_char(modal.right() - 1, sy, '\u{2502}', bottom_style);
-    }
-}
-
-/// Rounded border (╭╮╰╯) — used by the model dialog, matching OpenCode's lipgloss.RoundedBorder().
-pub fn draw_rounded_border(buf: &mut CellBuffer, modal: Rect, style: Style) {
-    buf.put_char(modal.x, modal.y, '\u{256d}', style);           // ╭
-    buf.put_char(modal.right() - 1, modal.y, '\u{256e}', style);  // ╮
-    buf.put_char(modal.x, modal.bottom() - 1, '\u{2570}', style); // ╰
-    buf.put_char(modal.right() - 1, modal.bottom() - 1, '\u{256f}', style); // ╯
-    for sx in (modal.x + 1)..(modal.right() - 1) {
-        buf.put_char(sx, modal.y, '\u{2500}', style);
-        buf.put_char(sx, modal.bottom() - 1, '\u{2500}', style);
-    }
-    for sy in (modal.y + 1)..(modal.bottom() - 1) {
-        buf.put_char(modal.x, sy, '\u{2502}', style);
-        buf.put_char(modal.right() - 1, sy, '\u{2502}', style);
-    }
-}
-
-fn dim_background(buf: &mut CellBuffer, area: Rect, bg: Color, fg: Color) {
-    for sy in area.y..area.bottom() {
-        for sx in area.x..area.right() {
-            if let Some(cell) = buf.get_mut(sx, sy) {
-                cell.style = Style::new().bg(bg).fg(fg);
-            }
-        }
-    }
-}
-
-fn fill_modal_bg(buf: &mut CellBuffer, modal: Rect, bg: Color, fg: Color) {
-    for sy in modal.y..modal.bottom() {
-        for sx in modal.x..modal.right() {
-            buf.put_char(sx, sy, ' ', Style::new().bg(bg).fg(fg));
-        }
-    }
-}
+use crate::constants::*;
 
 pub fn render_help_modal(buf: &mut CellBuffer, area: Rect, app: &App, scroll: usize) {
     let t = &app.theme;
 
-    let modal_w = (area.width as usize * 7 / 10).clamp(50, 80) as u16;
-    let modal_h = (area.height as usize * 8 / 10).clamp(20, 40) as u16;
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let modal_w = ((area.width as f32 * MODAL_WIDTH_RATIO) as u16).clamp(MODAL_MIN_WIDTH, MODAL_MAX_WIDTH);
+    let modal_h = ((area.height as f32 * MODAL_HEIGHT_RATIO) as u16).clamp(MODAL_MIN_HEIGHT, MODAL_MAX_HEIGHT);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
 
     frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
     frame.draw_title(buf, " Commands Reference ", Style::new()
@@ -181,7 +96,7 @@ pub fn render_help_modal(buf: &mut CellBuffer, area: Rect, app: &App, scroll: us
                 buf.draw_str(inner_x + 1, y, cmd_display, cmd_style);
                 let desc_x = inner_x + 24;
                 if desc_x < frame.modal.right() - 2 {
-                    let max_desc = inner_w.saturating_sub(25);
+                    let max_desc = inner_w.saturating_sub(MODAL_HELP_DESC_MAX_SUBTRACT);
                     let desc_display = truncate_str(desc, max_desc);
                     buf.draw_str(desc_x, y, desc_display, desc_style);
                 }
@@ -206,10 +121,10 @@ pub fn render_info_modal(
     let t = &app.theme;
 
     let line_count = lines.len() as u16;
-    let modal_w = (area.width as usize * 7 / 10).clamp(50, 80) as u16;
+    let modal_w = ((area.width as f32 * MODAL_WIDTH_RATIO) as u16).clamp(MODAL_MIN_WIDTH, MODAL_MAX_WIDTH);
     let content_h = line_count.min(area.height.saturating_sub(4));
     let modal_h = content_h + 4;
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
 
     let border_style = Style::new().fg(t.primary);
     frame.draw_border(buf, border_style, border_style);
@@ -287,18 +202,18 @@ pub fn render_model_dialog(buf: &mut CellBuffer, area: Rect, app: &App) {
     }
 
     const NUM_VISIBLE: usize = 12;
-    let modal_w: u16 = (area.width * 70 / 100).clamp(44, 60);
+    let modal_w: u16 = ((area.width as f32 * PICKER_MODAL_WIDTH_RATIO) as u16).clamp(44, PICKER_MODAL_MAX_WIDTH);
     let total_rows = display_rows.len();
     let visible = total_rows.min(NUM_VISIBLE);
 
-    let has_scroll_up = app.model_dialog_scroll > 0;
-    let has_scroll_down = total_rows > NUM_VISIBLE && app.model_dialog_scroll + NUM_VISIBLE < total_rows;
+    let has_scroll_up = app.modals.model_dialog_scroll > 0;
+    let has_scroll_down = total_rows > NUM_VISIBLE && app.modals.model_dialog_scroll + NUM_VISIBLE < total_rows;
     let has_indicators = has_scroll_up || has_scroll_down;
 
     let modal_h = (7u16 + visible as u16 + if has_indicators { 1u16 } else { 0u16 })
-        .max(10)
+        .max(PICKER_MODAL_MIN_HEIGHT)
         .min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_x = frame.inner_x;
     let inner_w = frame.inner_w;
 
@@ -311,12 +226,12 @@ pub fn render_model_dialog(buf: &mut CellBuffer, area: Rect, app: &App) {
     let search_y = frame.modal.y + 2;
     buf.draw_str(inner_x, search_y, "> ",
         Style::new().fg(t.text_muted).bg(t.background));
-    let filter_display = if app.model_dialog_filter.is_empty() {
+    let filter_display = if app.modals.model_dialog_filter.is_empty() {
         "type to filter...".to_string()
     } else {
-        app.model_dialog_filter.clone()
+        app.modals.model_dialog_filter.clone()
     };
-    let filter_style = if app.model_dialog_filter.is_empty() {
+    let filter_style = if app.modals.model_dialog_filter.is_empty() {
         Style::new().fg(t.text_muted).bg(t.background)
     } else {
         Style::new().fg(t.text).bg(t.background)
@@ -325,7 +240,7 @@ pub fn render_model_dialog(buf: &mut CellBuffer, area: Rect, app: &App) {
     let truncated_filter: String = filter_display.chars().take(max_filter_w).collect();
     buf.draw_str(inner_x + 2, search_y, &truncated_filter, filter_style);
 
-    if !app.model_dialog_filter.is_empty() {
+    if !app.modals.model_dialog_filter.is_empty() {
         let cursor_x = inner_x + 2 + display_width(&truncated_filter);
         if cursor_x < frame.modal.right() - 1 {
             buf.put_char(cursor_x, search_y, '\u{2588}',
@@ -337,12 +252,10 @@ pub fn render_model_dialog(buf: &mut CellBuffer, area: Rect, app: &App) {
     }
 
     let sep_y = frame.modal.y + 3;
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, sep_y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
+    frame.draw_separator(buf, sep_y, Style::new().fg(t.border_dim));
 
     let model_start_y = frame.modal.y + 4;
-    let scroll = app.model_dialog_scroll;
+    let scroll = app.modals.model_dialog_scroll;
 
     if display_rows.is_empty() {
         buf.draw_str(inner_x, model_start_y, "No models match filter.",
@@ -361,20 +274,10 @@ pub fn render_model_dialog(buf: &mut CellBuffer, area: Rect, app: &App) {
                         Style::new().fg(t.text_muted).bg(t.background).add_modifier(TextAttributes::bold()));
                 }
                 DisplayRow::Model(model_idx) => {
-                    let selected = *model_idx == app.model_dialog_model_idx;
+                    let selected = *model_idx == app.modals.model_dialog_model_idx;
                     let model_info = &models[*model_idx];
                     let display = format!("  {}", truncate_str(&model_info.name, inner_w.saturating_sub(2)));
-
-                    if selected {
-                        for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                            buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
-                        }
-                        buf.draw_str(inner_x, row_y, &display,
-                            Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
-                    } else {
-                        buf.draw_str(inner_x, row_y, &display,
-                            Style::new().fg(t.text).bg(t.background));
-                    }
+                    frame.draw_item(buf, row_y, &display, selected, t);
                 }
             }
         }
@@ -394,7 +297,7 @@ pub fn render_model_dialog(buf: &mut CellBuffer, area: Rect, app: &App) {
 
 pub fn render_connect_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
-    let integrations = &app.connect_integration_list;
+    let integrations = &app.modals.connect_integration_list;
     if integrations.is_empty() {
         return;
     }
@@ -403,7 +306,7 @@ pub fn render_connect_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let visible = integrations.len().min(NUM_VISIBLE);
     let modal_w: u16 = (area.width * 55 / 100).clamp(48, 60);
     let modal_h = (6u16 + visible as u16).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_x = frame.inner_x;
     let inner_w = frame.inner_w;
 
@@ -413,7 +316,7 @@ pub fn render_connect_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
         Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
 
     let list_start_y = frame.modal.y + 3;
-    let scroll = app.connect_picker_scroll;
+    let scroll = app.modals.connect_picker_scroll;
     let end_idx = (scroll + NUM_VISIBLE).min(integrations.len());
 
     let mut row = 0usize;
@@ -446,37 +349,26 @@ pub fn render_connect_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
             status_label
         );
 
-        let selected = i == app.connect_picker_idx;
-        if selected {
-            for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
-            }
-            buf.draw_str(inner_x, row_y, &display,
-                Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
+        let selected = i == app.modals.connect_picker_idx;
+        let unselected_style = if integ.connected {
+            Style::new().fg(t.text).bg(t.background)
         } else {
-            let style = if integ.connected {
-                Style::new().fg(t.text).bg(t.background)
-            } else {
-                Style::new().fg(t.text_muted).bg(t.background)
-            };
-            buf.draw_str(inner_x, row_y, &display, style);
-        }
+            Style::new().fg(t.text_muted).bg(t.background)
+        };
+        frame.draw_item_custom(buf, row_y, &display, selected, unselected_style, t);
         row += 1;
     }
 
-    let hints_y = frame.modal.bottom().saturating_sub(2);
     let hints = "\u{2191}\u{2193} nav \u{2502} Enter connect \u{2502} d disconnect \u{2502} Esc close";
-    let hints_display = truncate_str(hints, inner_w);
-    buf.draw_str(inner_x, hints_y, hints_display,
-        Style::new().fg(t.text_muted).bg(t.background));
+    frame.draw_footer(buf, hints, Style::new().fg(t.text_muted).bg(t.background), Style::new().fg(t.border_dim));
 }
 
 pub fn render_api_key_prompt(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
-    let target = app.connect_target.as_deref().unwrap_or("unknown");
+    let target = app.modals.connect_target.as_deref().unwrap_or("unknown");
     let modal_w = 50u16;
     let modal_h = 8u16;
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_x = frame.inner_x;
 
     frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
@@ -485,7 +377,7 @@ pub fn render_api_key_prompt(buf: &mut CellBuffer, area: Rect, app: &App) {
     frame.draw_close_hint(buf, " Esc ", Style::new().fg(t.text_muted).bg(t.background));
 
     let mut y = frame.modal.y + 2;
-    let label = if app.connect_is_integration {
+    let label = if app.modals.connect_is_integration {
         format!("Enter bot token for {}:", target)
     } else {
         format!("Enter API key for {}:", target)
@@ -494,20 +386,14 @@ pub fn render_api_key_prompt(buf: &mut CellBuffer, area: Rect, app: &App) {
         Style::new().fg(t.text).bg(t.background));
     y += 1;
 
-    let input_bg = t.background_panel;
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, y, ' ', Style::new().bg(input_bg).fg(t.text));
-    }
-    buf.draw_str(inner_x, y, "\u{276f} ", Style::new().fg(t.primary).bg(input_bg));
-
-    let placeholder = if app.connect_is_integration { "bot-token..." } else { "sk-..." };
-    if app.api_key_input.is_empty() {
-        buf.draw_str(inner_x + 2, y, placeholder, Style::new().fg(t.text_muted).bg(input_bg));
-        buf.put_char(inner_x + 2, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
+    let placeholder = if app.modals.connect_is_integration { "bot-token..." } else { "sk-..." };
+    if app.modals.api_key_input.is_empty() {
+        let config = InputRowConfig::new("", 0, placeholder);
+        draw_input_row(buf, frame.modal.x + 1, y, frame.inner_w + 2, &config, t);
     } else {
-        let masked: String = "\u{2022}".repeat(16);
-        let display: String = masked.chars().take(frame.inner_w.saturating_sub(4)).collect();
-        buf.draw_str(inner_x + 2, y, &display, Style::new().fg(t.text).bg(input_bg));
+        let masked = "\u{2022}".repeat(16);
+        let config = InputRowConfig::new(&masked, masked.len(), "");
+        draw_input_row(buf, frame.modal.x + 1, y, frame.inner_w + 2, &config, t);
     }
 
     let hints_y = frame.modal.bottom().saturating_sub(2);
@@ -517,7 +403,7 @@ pub fn render_api_key_prompt(buf: &mut CellBuffer, area: Rect, app: &App) {
 
 pub fn render_provider_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
-    let providers = &app.available_providers;
+    let providers = &app.modals.available_providers;
     if providers.is_empty() {
         return;
     }
@@ -526,7 +412,7 @@ pub fn render_provider_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let visible = providers.len().min(NUM_VISIBLE);
     let modal_w: u16 = (area.width * 50 / 100).clamp(40, 52);
     let modal_h = (4u16 + visible as u16).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_x = frame.inner_x;
     let inner_w = frame.inner_w;
 
@@ -536,7 +422,7 @@ pub fn render_provider_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
         Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
 
     let list_start_y = frame.modal.y + 3;
-    let scroll = app.provider_picker_scroll;
+    let scroll = app.modals.provider_picker_scroll;
     let end_idx = (scroll + NUM_VISIBLE).min(providers.len());
 
     let mut last_cat: Option<&str> = None;
@@ -562,7 +448,7 @@ pub fn render_provider_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
             continue;
         }
 
-        let selected = i == app.provider_picker_idx;
+        let selected = i == app.modals.provider_picker_idx;
         let key_icon = if p.needs_api_key {
             if p.has_key { "\u{2713} " } else { "\u{2022} " }
         } else {
@@ -572,32 +458,24 @@ pub fn render_provider_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
 
         let row_y = list_start_y + row as u16;
         if row_y >= frame.modal.bottom().saturating_sub(1) { break; }
-        if selected {
-            for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
-            }
-            buf.draw_str(inner_x, row_y, &display,
-                Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
+        let unselected_style = if p.needs_api_key && !p.has_key {
+            Style::new().fg(t.text_muted).bg(t.background)
         } else {
-            let style = if p.needs_api_key && !p.has_key {
-                Style::new().fg(t.text_muted).bg(t.background)
-            } else {
-                Style::new().fg(t.text).bg(t.background)
-            };
-            buf.draw_str(inner_x, row_y, &display, style);
-        }
+            Style::new().fg(t.text).bg(t.background)
+        };
+        frame.draw_item_custom(buf, row_y, &display, selected, unselected_style, t);
         row += 1;
     }
 }
 
 pub fn render_memory_editor(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
-    let entry_count = app.memory_entries.len();
+    let entry_count = app.modals.memory_entries.len();
     let max_visible = 10u16;
     let visible = (entry_count as u16).min(max_visible);
-    let modal_w = (area.width * 7 / 10).clamp(50, 64);
+    let modal_w = ((area.width as f32 * MODAL_WIDTH_RATIO) as u16).clamp(MODAL_MIN_WIDTH, 64);
     let modal_h = (visible + 9).max(12).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_w = frame.inner_w;
 
     frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
@@ -608,45 +486,27 @@ pub fn render_memory_editor(buf: &mut CellBuffer, area: Rect, app: &App) {
     let inner_x = frame.inner_x;
     let mut y = frame.modal.y + 2;
 
-    let input_bg = t.background_panel;
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, y, ' ', Style::new().bg(input_bg).fg(t.text));
-    }
-    buf.draw_str(inner_x, y, "\u{276f} ", Style::new().fg(t.primary).bg(input_bg));
-    if app.memory_editor_input.is_empty() {
-        buf.draw_str(inner_x + 2, y, "Type to add...", Style::new().fg(t.text_muted).bg(input_bg));
-        buf.put_char(inner_x + 2, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
-    } else {
-        let max_input = inner_w.saturating_sub(4);
-        let display: String = app.memory_editor_input.chars().take(max_input).collect();
-        buf.draw_str(inner_x + 2, y, &display, Style::new().fg(t.text).bg(input_bg));
-        let cx = inner_x + 2 + display_width(&display);
-        if cx < frame.modal.right() - 2 {
-            buf.put_char(cx, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
-        }
-    }
+    let cursor = app.modals.memory_editor_input.chars().count();
+    let config = InputRowConfig::new(&app.modals.memory_editor_input, cursor, "Type to add...");
+    draw_input_row(buf, frame.modal.x + 1, y, frame.inner_w + 2, &config, t);
     y += 1;
 
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
+    frame.draw_separator(buf, y, Style::new().fg(t.border_dim));
     y += 1;
 
     let max_y = frame.modal.bottom().saturating_sub(3);
-    if app.memory_entries.is_empty() {
+    if app.modals.memory_entries.is_empty() {
         buf.draw_str(inner_x, y, "No entries yet. Type above to add.", Style::new().fg(t.text_muted).bg(t.background));
     } else {
-        for (i, (target, content)) in app.memory_entries.iter().enumerate() {
+        for (i, (target, content)) in app.modals.memory_entries.iter().enumerate() {
             if y >= max_y { break; }
-            let selected = i == app.memory_editor_index;
+            let selected = i == app.modals.memory_editor_index;
             let max_display = inner_w.saturating_sub(8);
             let display: String = content.chars().take(max_display).collect();
             let tag = if target == "user" { "[user]" } else { "[agent]" };
 
             if selected {
-                for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                    buf.put_char(sx, y, ' ', Style::new().bg(t.primary).fg(t.background_darker));
-                }
+                frame.draw_row_highlighted(buf, y, Style::new().bg(t.primary).fg(t.background_darker));
                 buf.draw_str(inner_x, y, &format!("\u{25b8} {} {}", tag, display),
                     Style::new().bg(t.primary).fg(t.background_darker).add_modifier(TextAttributes::bold()));
             } else {
@@ -658,42 +518,29 @@ pub fn render_memory_editor(buf: &mut CellBuffer, area: Rect, app: &App) {
         }
     }
 
-    let hints_sep_y = frame.modal.bottom().saturating_sub(3);
-    let hints_y = frame.modal.bottom().saturating_sub(2);
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, hints_sep_y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
-    buf.draw_str(frame.modal.x + 2, hints_y, " Enter add \u{2502} d delete \u{2502} \u{2191}\u{2193} navigate ",
-        Style::new().fg(t.text_muted).bg(t.background));
+    frame.draw_footer(buf, " Enter add \u{2502} d delete \u{2502} \u{2191}\u{2193} navigate ",
+        Style::new().fg(t.text_muted).bg(t.background), Style::new().fg(t.border_dim));
 }
 
 // ── Soul Editor Modal (view and modify personality) ──
 
 pub fn render_soul_editor(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
-    let modal_w = (area.width * 7 / 10).clamp(50, 60);
+    let modal_w = ((area.width as f32 * MODAL_WIDTH_RATIO) as u16).clamp(MODAL_MIN_WIDTH, 60);
     let modal_h = 14u16;
-    let modal_x = area.x + (area.width.saturating_sub(modal_w)) / 2;
-    let modal_y = area.y + (area.height.saturating_sub(modal_h)) / 2;
-    let modal = Rect::new(modal_x, modal_y, modal_w, modal_h);
-    let inner_w = (modal.width as usize).saturating_sub(4);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
+    let inner_w = frame.inner_w;
 
-    dim_background(buf, area, t.background_darker, t.text_muted);
-    fill_modal_bg(buf, modal, t.background, t.text);
-
-    let border_top = Style::new().fg(t.primary);
-    let border_bot = Style::new().fg(t.border);
-    draw_modal_border(buf, modal, border_top, border_bot);
-
-    buf.draw_str(modal.x + 2, modal.y, " Soul ", Style::new()
+    frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
+    frame.draw_title(buf, " Soul ", Style::new()
         .fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
-    buf.draw_str(modal.right().saturating_sub(6), modal.y, " Esc ",
-        Style::new().fg(t.text_muted).bg(t.background));
+    frame.draw_close_hint(buf, " Esc ", Style::new().fg(t.text_muted).bg(t.background));
 
-    let inner_x = modal.x + 2;
+    let inner_x = frame.inner_x;
+    let modal = frame.modal;
     let mut y = modal.y + 2;
 
-    if app.soul_editor_input.is_empty() {
+    if app.modals.soul_editor_input.is_empty() {
         buf.draw_str(inner_x, y, "Default personality active", Style::new().fg(t.text_muted).bg(t.background));
     } else {
         buf.draw_str(inner_x, y, "Current personality:", Style::new().fg(t.text_muted).bg(t.background));
@@ -703,18 +550,14 @@ pub fn render_soul_editor(buf: &mut CellBuffer, area: Rect, app: &App) {
     // Editable text area
     let text_area_h = 5u16;
     let text_bg = t.background_panel;
-    for ty in 0..text_area_h {
-        let row_y = y + ty;
-        for sx in (modal.x + 1)..(modal.right() - 1) {
-            buf.put_char(sx, row_y, ' ', Style::new().bg(text_bg).fg(t.text));
-        }
-    }
+    let text_area = Rect::new(modal.x + 1, y, modal.width.saturating_sub(2), text_area_h);
+    fill_area(buf, text_area, Style::new().bg(text_bg).fg(t.text));
 
     // Show input text, or placeholder if empty
-    let display_text = if app.soul_editor_input.is_empty() {
+    let display_text = if app.modals.soul_editor_input.is_empty() {
         ""  // Empty = default personality
     } else {
-        &app.soul_editor_input
+        &app.modals.soul_editor_input
     };
 
     let max_chars = inner_w.saturating_sub(2);
@@ -743,19 +586,17 @@ pub fn render_soul_editor(buf: &mut CellBuffer, area: Rect, app: &App) {
 
     y += text_area_h;
 
-    for sx in (modal.x + 1)..(modal.right() - 1) {
-        buf.put_char(sx, y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
+    frame.draw_separator(buf, y, Style::new().fg(t.border_dim));
     y += 1;
-    buf.draw_str(modal.x + 2, y, " Enter save \u{2502} Ctrl+R reset \u{2502} Type to edit ",
+    buf.draw_str(frame.inner_x, y, " Enter save \u{2502} Ctrl+R reset \u{2502} Type to edit ",
         Style::new().fg(t.text_muted).bg(t.background));
 }
 
 pub fn render_skill_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
-    let query = app.skill_browser_filter.to_lowercase();
+    let query = app.modals.skill_browser_filter.to_lowercase();
     let filtered: Vec<(usize, &sediman_tui_bridge::HubSkill)> = app
-        .skill_browser_skills
+        .modals.skill_browser_skills
         .iter()
         .enumerate()
         .filter(|(_, s)| {
@@ -771,7 +612,7 @@ pub fn render_skill_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
     let max_items_on_screen = area.height.saturating_sub(8) as usize;
     let max_visible = filtered.len().min(max_items_on_screen);
     let modal_h = (max_visible as u16 + 7).max(12).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_w = frame.inner_w;
 
     frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
@@ -779,8 +620,8 @@ pub fn render_skill_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
         buf,
         &format!(
             " Skills ({}/{}) ",
-            if query.is_empty() { app.skill_browser_skills.len() } else { filtered.len() },
-            app.skill_browser_skills.len()
+            if query.is_empty() { app.modals.skill_browser_skills.len() } else { filtered.len() },
+            app.modals.skill_browser_skills.len()
         ),
         Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()),
     );
@@ -789,34 +630,16 @@ pub fn render_skill_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
     let inner_x = frame.inner_x;
     let mut y = frame.modal.y + 2;
 
-    let input_bg = t.background_panel;
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, y, ' ', Style::new().bg(input_bg).fg(t.text));
-    }
-    buf.draw_str(inner_x, y, "\u{276f} ", Style::new().fg(t.primary).bg(input_bg));
-    if app.skill_browser_filter.is_empty() && !app.skill_browser_filter_active {
-        buf.draw_str(
-            inner_x + 2,
-            y,
-            "Press / to search...",
-            Style::new().fg(t.text_muted).bg(input_bg),
-        );
-    } else if app.skill_browser_filter.is_empty() && app.skill_browser_filter_active {
-        buf.put_char(inner_x + 2, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
+    let filter_cursor = app.modals.skill_browser_filter.chars().count();
+    let config = if app.modals.skill_browser_filter.is_empty() && !app.modals.skill_browser_filter_active {
+        InputRowConfig::new("", 0, "Press / to search...")
     } else {
-        let max_input = inner_w.saturating_sub(4);
-        let display: String = app.skill_browser_filter.chars().take(max_input).collect();
-        buf.draw_str(inner_x + 2, y, &display, Style::new().fg(t.text).bg(input_bg));
-        let cx = inner_x + 2 + display_width(&display);
-        if cx < frame.modal.right() - 2 {
-            buf.put_char(cx, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
-        }
-    }
+        InputRowConfig::new(&app.modals.skill_browser_filter, filter_cursor, "")
+    };
+    draw_input_row(buf, frame.modal.x + 1, y, frame.inner_w + 2, &config, t);
     y += 1;
 
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
+    frame.draw_separator(buf, y, Style::new().fg(t.border_dim));
     y += 1;
 
     let hints_sep_y = frame.modal.bottom().saturating_sub(3);
@@ -824,20 +647,20 @@ pub fn render_skill_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
     let max_y = desc_area_y;
 
     if filtered.is_empty() {
-        if app.skill_browser_skills.is_empty() {
+        if app.modals.skill_browser_skills.is_empty() {
             buf.draw_str(inner_x, y, "No skills found in hub.", Style::new().fg(t.text_muted).bg(t.background));
         } else {
             buf.draw_str(inner_x, y, "No matches for filter.", Style::new().fg(t.text_muted).bg(t.background));
         }
     } else {
-        let scroll = app.skill_browser_scroll as usize;
+        let scroll = app.modals.skill_browser_scroll as usize;
         let visible_items: Vec<_> = filtered.iter().skip(scroll).collect();
         for (row_idx, &(_orig_idx, skill)) in visible_items.iter().enumerate() {
             let row_y = y + row_idx as u16;
             if row_y >= max_y {
                 break;
             }
-            let selected = scroll + row_idx == app.skill_browser_selected;
+            let selected = scroll + row_idx == app.modals.skill_browser_selected;
             let is_installed = skill.installed;
             let badge_w = if is_installed { 13 } else { 0 };
             let max_name = inner_w.saturating_sub(6 + badge_w);
@@ -845,18 +668,9 @@ pub fn render_skill_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
             let badge = if is_installed { " \u{2713}installed" } else { "" };
 
             if selected {
-                for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                    buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
-                }
-                buf.draw_str(
-                    inner_x,
-                    row_y,
-                    &format!("\u{25b8} {}{}", name_display, badge),
-                    Style::new()
-                        .bg(t.primary)
-                        .fg(t.background_darker)
-                        .add_modifier(TextAttributes::bold()),
-                );
+                frame.draw_row_highlighted(buf, row_y, Style::new().bg(t.primary).fg(t.background));
+                buf.draw_str(inner_x, row_y, &format!("\u{25b8} {}{}", name_display, badge),
+                    Style::new().bg(t.primary).fg(t.background_darker).add_modifier(TextAttributes::bold()));
             } else {
                 let name_style = if is_installed {
                     Style::new().fg(t.secondary).bg(t.background)
@@ -868,35 +682,24 @@ pub fn render_skill_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
         }
 
         let sep_y = desc_area_y;
-        for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-            buf.put_char(sx, sep_y, '\u{2500}', Style::new().fg(t.border_dim));
-        }
+        frame.draw_separator(buf, sep_y, Style::new().fg(t.border_dim));
 
         let preview_y = sep_y + 1;
-        if let Some(&(_, selected_skill)) = filtered.get(app.skill_browser_selected) {
+        if let Some(&(_, selected_skill)) = filtered.get(app.modals.skill_browser_selected) {
             let max_desc = inner_w.saturating_sub(4);
             let desc = truncate_str(&selected_skill.description, max_desc);
             buf.draw_str(inner_x, preview_y, desc, Style::new().fg(t.text).bg(t.background));
         }
     }
 
-    let hints_sep_y = frame.modal.bottom().saturating_sub(3);
-    let hints_y = frame.modal.bottom().saturating_sub(2);
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, hints_sep_y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
-    buf.draw_str(
-        frame.modal.x + 2,
-        hints_y,
-        " Enter run/inst \u{2502} d uninstall \u{2502} i info \u{2502} j/k nav \u{2502} / search ",
-        Style::new().fg(t.text_muted).bg(t.background),
-    );
+    frame.draw_footer(buf, " Enter run/inst \u{2502} d uninstall \u{2502} i info \u{2502} j/k nav \u{2502} / search ",
+        Style::new().fg(t.text_muted).bg(t.background), Style::new().fg(t.border_dim));
 }
 
 pub fn render_session_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
-    let query = app.session_filter.to_lowercase();
-    let filtered: Vec<(usize, &sediman_tui_bridge::SessionInfo)> = app.session_list
+    let query = app.modals.session_filter.to_lowercase();
+    let filtered: Vec<(usize, &sediman_tui_bridge::SessionInfo)> = app.modals.session_list
         .iter()
         .enumerate()
         .filter(|(_, s)| {
@@ -906,44 +709,29 @@ pub fn render_session_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
         })
         .collect();
 
-    let modal_w = (area.width * 7 / 10).clamp(52, 72);
+    let modal_w = ((area.width as f32 * MODAL_WIDTH_RATIO) as u16).clamp(52, 72);
     let content_rows = filtered.len().min(8);
     let modal_h = (content_rows as u16 + 9).max(10).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_w = frame.inner_w;
 
     frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
-    frame.draw_title(buf, &format!(" Sessions ({}) ", app.session_list.len()), Style::new()
+    frame.draw_title(buf, &format!(" Sessions ({}) ", app.modals.session_list.len()), Style::new()
         .fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
     frame.draw_close_hint(buf, " Esc ", Style::new().fg(t.text_muted).bg(t.background));
 
     let inner_x = frame.inner_x;
     let mut y = frame.modal.y + 2;
 
-    // Input row
-    let input_bg = t.background_panel;
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, y, ' ', Style::new().bg(input_bg).fg(t.text));
-    }
-    buf.draw_str(inner_x, y, "\u{276f} ", Style::new().fg(t.primary).bg(input_bg));
-    if app.session_filter.is_empty() {
-        buf.draw_str(inner_x + 2, y, "Type to search sessions...", Style::new().fg(t.text_muted).bg(input_bg));
-        buf.put_char(inner_x + 2, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
-    } else {
-        let max_input = inner_w.saturating_sub(4);
-        let display: String = app.session_filter.chars().take(max_input).collect();
-        buf.draw_str(inner_x + 2, y, &display, Style::new().fg(t.text).bg(input_bg));
-        let cx = inner_x + 2 + display_width(&display);
-        if cx < frame.modal.right() - 2 {
-            buf.put_char(cx, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
-        }
-    }
+    let session_cursor = app.modals.session_filter.chars().count();
+    let config = InputRowConfig::new(&app.modals.session_filter, session_cursor, "Type to search sessions...");
+    draw_input_row(buf, frame.modal.x + 1, y, frame.inner_w + 2, &config, t);
     y += 2;
 
     let max_y = frame.modal.bottom().saturating_sub(3);
 
     if filtered.is_empty() {
-        if app.session_list.is_empty() {
+        if app.modals.session_list.is_empty() {
             buf.draw_str(inner_x, y, "No sessions yet. Tasks will appear here.", Style::new().fg(t.text_muted).bg(t.background));
         } else {
             buf.draw_str(inner_x, y, "No matches for filter.", Style::new().fg(t.text_muted).bg(t.background));
@@ -951,15 +739,13 @@ pub fn render_session_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
     } else {
         for (i, (_, session)) in filtered.iter().enumerate() {
             if y >= max_y { break; }
-            let selected = i == app.session_selected;
+            let selected = i == app.modals.session_selected;
             let max_task = inner_w.saturating_sub(8);
             let task_display = truncate_str(&session.task, max_task);
             let id_str = format!("#{}", session.id);
 
             if selected {
-                for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                    buf.put_char(sx, y, ' ', Style::new().bg(t.primary).fg(t.background));
-                }
+                frame.draw_row_highlighted(buf, y, Style::new().bg(t.primary).fg(t.background));
                 buf.draw_str(inner_x, y, &format!("\u{25b8} {} {}", id_str, task_display),
                     Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
             } else {
@@ -982,22 +768,16 @@ pub fn render_session_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
         }
     }
 
-    let hints_sep_y = frame.modal.bottom().saturating_sub(3);
-    let hints_y = frame.modal.bottom().saturating_sub(2);
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, hints_sep_y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
-    buf.draw_str(frame.modal.x + 2, hints_y,
-        " Enter view \u{2502} d delete \u{2502} \u{2191}\u{2193} navigate \u{2502} Type to search ",
-        Style::new().fg(t.text_muted).bg(t.background));
+    frame.draw_footer(buf, " Enter view \u{2502} d delete \u{2502} \u{2191}\u{2193} navigate \u{2502} Type to search ",
+        Style::new().fg(t.text_muted).bg(t.background), Style::new().fg(t.border_dim));
 }
 
 pub fn render_theme_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
     let modal_w = (area.width as usize * 6 / 10).clamp(36, 50) as u16;
-    let modal_h = (app.theme_picker_names.len().min(14) as u16 + 6).clamp(10, 24);
+    let modal_h = (app.modals.theme_picker_names.len().min(14) as u16 + 6).clamp(10, 24);
 
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
     frame.draw_title(buf, " Themes ", Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
     frame.draw_close_hint(buf, " Esc close ", Style::new().fg(t.text_muted).bg(t.background));
@@ -1005,12 +785,12 @@ pub fn render_theme_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let list_start = frame.modal.y + 2;
     let inner_x = frame.modal.x + 2;
 
-    for (i, name) in app.theme_picker_names.iter().enumerate() {
+    for (i, name) in app.modals.theme_picker_names.iter().enumerate() {
         let row_y = list_start + i as u16;
         if row_y >= frame.modal.bottom().saturating_sub(3) { break; }
 
         let is_current = *name == app.theme_name;
-        let is_selected = i == app.theme_picker_selected;
+        let is_selected = i == app.modals.theme_picker_selected;
 
         let (marker, row_style) = if is_selected {
             ("\u{25b8}", Style::new().fg(t.background).bg(t.primary))
@@ -1037,9 +817,7 @@ pub fn render_theme_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     }
 
     let sep_y = frame.modal.bottom().saturating_sub(3);
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, sep_y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
+    frame.draw_separator(buf, sep_y, Style::new().fg(t.border_dim));
 
     let hints_y = frame.modal.bottom().saturating_sub(2);
     buf.draw_str(frame.modal.x + 2, hints_y,
@@ -1049,56 +827,39 @@ pub fn render_theme_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
 
 pub fn render_schedule_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
-    let modal_w = (area.width * 7 / 10).clamp(52, 72);
-    let content_rows = app.schedule_jobs.len().min(8);
+    let modal_w = ((area.width as f32 * MODAL_WIDTH_RATIO) as u16).clamp(52, 72);
+    let content_rows = app.modals.schedule_jobs.len().min(8);
     let modal_h = (content_rows as u16 + 9).max(10).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_w = frame.inner_w;
 
     frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
-    frame.draw_title(buf, &format!(" Schedule ({}) ", app.schedule_jobs.len()), Style::new()
+    frame.draw_title(buf, &format!(" Schedule ({}) ", app.modals.schedule_jobs.len()), Style::new()
         .fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
     frame.draw_close_hint(buf, " Esc ", Style::new().fg(t.text_muted).bg(t.background));
 
     let inner_x = frame.inner_x;
     let mut y = frame.modal.y + 2;
 
-    // Input row
-    let input_bg = t.background_panel;
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, y, ' ', Style::new().bg(input_bg).fg(t.text));
-    }
-    buf.draw_str(inner_x, y, "\u{276f} ", Style::new().fg(t.primary).bg(input_bg));
-    if app.schedule_input.is_empty() {
-        buf.draw_str(inner_x + 2, y, "<cron> <task> to add...", Style::new().fg(t.text_muted).bg(input_bg));
-        buf.put_char(inner_x + 2, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
-    } else {
-        let max_input = inner_w.saturating_sub(4);
-        let display: String = app.schedule_input.chars().take(max_input).collect();
-        buf.draw_str(inner_x + 2, y, &display, Style::new().fg(t.text).bg(input_bg));
-        let cx = inner_x + 2 + display_width(&display);
-        if cx < frame.modal.right() - 2 {
-            buf.put_char(cx, y, '\u{2588}', Style::new().fg(t.primary).bg(input_bg));
-        }
-    }
+    let sched_cursor = app.modals.schedule_input.chars().count();
+    let config = InputRowConfig::new(&app.modals.schedule_input, sched_cursor, "<cron> <task> to add...");
+    draw_input_row(buf, frame.modal.x + 1, y, frame.inner_w + 2, &config, t);
     y += 2;
 
     let max_y = frame.modal.bottom().saturating_sub(3);
 
-    if app.schedule_jobs.is_empty() {
+    if app.modals.schedule_jobs.is_empty() {
         buf.draw_str(inner_x, y, "No scheduled jobs. Type above to add one.", Style::new().fg(t.text_muted).bg(t.background));
     } else {
-        for (i, job) in app.schedule_jobs.iter().enumerate() {
+        for (i, job) in app.modals.schedule_jobs.iter().enumerate() {
             if y >= max_y { break; }
-            let selected = i == app.schedule_selected;
+            let selected = i == app.modals.schedule_selected;
             let status_icon = if job.enabled { "\u{25cf}" } else { "\u{25cb}" };
             let max_task = inner_w.saturating_sub(12);
             let task_display = truncate_str(&job.task, max_task);
 
             if selected {
-                for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                    buf.put_char(sx, y, ' ', Style::new().bg(t.primary).fg(t.background));
-                }
+                frame.draw_row_highlighted(buf, y, Style::new().bg(t.primary).fg(t.background));
                 buf.draw_str(inner_x, y, &format!("{} {} {}", status_icon, task_display, job.cron_expr),
                     Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
             } else {
@@ -1118,57 +879,31 @@ pub fn render_schedule_browser(buf: &mut CellBuffer, area: Rect, app: &App) {
         }
     }
 
-    let hints_sep_y = frame.modal.bottom().saturating_sub(3);
-    let hints_y = frame.modal.bottom().saturating_sub(2);
-    for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-        buf.put_char(sx, hints_sep_y, '\u{2500}', Style::new().fg(t.border_dim));
-    }
-    buf.draw_str(frame.modal.x + 2, hints_y,
-        " Enter toggle/add \u{2502} d/\u{232b} delete \u{2502} \u{2191}\u{2193} navigate \u{2502} Type to add ",
-        Style::new().fg(t.text_muted).bg(t.background));
+    frame.draw_footer(buf, " Enter toggle/add \u{2502} d/\u{232b} delete \u{2502} \u{2191}\u{2193} navigate \u{2502} Type to add ",
+        Style::new().fg(t.text_muted).bg(t.background), Style::new().fg(t.border_dim));
 }
 
 // ── Coder Picker Modal ──
 
 const CODER_BACKENDS: &[&str] = &["internal", "claude-code", "codex", "opencode"];
 
-/// Render the coder backend picker — same style as model dialog (rounded border, OpenCode look).
 pub fn render_coder_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
     let count = CODER_BACKENDS.len();
     let modal_w: u16 = 44;
-    // Height: border(2) + top_pad(1) + title(1) + blank(1) + items + bottom_pad(1)
     let modal_h = (6u16 + count as u16).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
-    let inner_x = frame.inner_x;
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
 
-    // Border: rounded corners, TextMuted
-    let border_style = Style::new().fg(t.text_muted).bg(t.background);
-    draw_rounded_border(buf, frame.modal, border_style);
-
-    // Title
-    buf.draw_str(inner_x, frame.modal.y + 1, "Select Coder Backend",
+    frame.draw_rounded_border(buf, Style::new().fg(t.text_muted).bg(t.background));
+    buf.draw_str(frame.inner_x, frame.modal.y + 1, "Select Coder Backend",
         Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
 
-    // Items starting at y+3
     let start_y = frame.modal.y + 3;
     for (i, backend) in CODER_BACKENDS.iter().enumerate() {
-        let row_y = start_y + i as u16;
-        let selected = i == app.coder_picker_selected;
-        let is_current = *backend == app.coder_backend;
+        let selected = i == app.modals.coder_picker_selected;
+        let is_current = *backend == app.agent.coder_backend;
         let label = if is_current { format!("{} (current)", backend) } else { backend.to_string() };
-        let display = truncate_str(&label, frame.inner_w);
-
-        if selected {
-            for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
-            }
-            buf.draw_str(inner_x, row_y, display,
-                Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
-        } else {
-            let fg = if is_current { t.secondary } else { t.text };
-            buf.draw_str(inner_x, row_y, display, Style::new().fg(fg).bg(t.background));
-        }
+        frame.draw_item_with_marker(buf, start_y + i as u16, &label, selected, is_current, t);
     }
 }
 
@@ -1178,58 +913,33 @@ pub fn render_search_mode_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
     let count = SEARCH_MODES.len();
     let modal_w: u16 = 44;
-    // Height: border(2) + top_pad(1) + title(1) + blank(1) + items + bottom_pad(1)
     let modal_h = (6u16 + count as u16).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
-    let inner_x = frame.inner_x;
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
 
-    // Border: rounded corners, TextMuted
-    let border_style = Style::new().fg(t.text_muted).bg(t.background);
-    draw_rounded_border(buf, frame.modal, border_style);
-
-    // Title
-    buf.draw_str(inner_x, frame.modal.y + 1, "Select Search Mode",
+    frame.draw_rounded_border(buf, Style::new().fg(t.text_muted).bg(t.background));
+    buf.draw_str(frame.inner_x, frame.modal.y + 1, "Select Search Mode",
         Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
 
-    // Description
     let desc = if frame.inner_w >= 40 {
         "Auto: agent chooses, Simple: web_search, Advanced: SearchSDK"
     } else {
         "Auto, Simple, Advanced"
     };
-    buf.draw_str(inner_x, frame.modal.y + 2, truncate_str(desc, frame.inner_w),
+    buf.draw_str(frame.inner_x, frame.modal.y + 2, truncate_str(desc, frame.inner_w),
         Style::new().fg(t.text_muted).bg(t.background));
 
-    // Items starting at y+4
     let start_y = frame.modal.y + 4;
     for (i, mode) in SEARCH_MODES.iter().enumerate() {
-        let row_y = start_y + i as u16;
-        let selected = i == app.search_mode_picker_selected;
-        let is_current = *mode == app.search_mode;
-
+        let selected = i == app.modals.search_mode_picker_selected;
+        let is_current = *mode == app.agent.search_mode;
         let label = match *mode {
             "auto" => "auto - agent chooses best method",
             "simple" => "simple - web_search (fast, simple)",
             "advanced" => "advanced - SearchSDK (complex research)",
             _ => *mode,
         };
-        let label_str = if is_current {
-            format!("{} (current)", label)
-        } else {
-            label.to_string()
-        };
-        let display = truncate_str(&label_str, frame.inner_w);
-
-        if selected {
-            for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
-            }
-            buf.draw_str(inner_x, row_y, display,
-                Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
-        } else {
-            let fg = if is_current { t.secondary } else { t.text };
-            buf.draw_str(inner_x, row_y, display, Style::new().fg(fg).bg(t.background));
-        }
+        let label_str = if is_current { format!("{} (current)", label) } else { label.to_string() };
+        frame.draw_item_with_marker(buf, start_y + i as u16, &label_str, selected, is_current, t);
     }
 }
 
@@ -1239,48 +949,24 @@ pub fn render_browser_mode_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
     let count = BROWSER_MODES.len();
     let modal_w: u16 = 40;
-    // Height: border(2) + top_pad(1) + title(1) + blank(1) + items + bottom_pad(1)
     let modal_h = (6u16 + count as u16).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
-    let inner_x = frame.inner_x;
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
 
-    // Border: rounded corners, TextMuted
-    let border_style = Style::new().fg(t.text_muted).bg(t.background);
-    draw_rounded_border(buf, frame.modal, border_style);
-
-    // Title
-    buf.draw_str(inner_x, frame.modal.y + 1, "Select Browser Mode",
+    frame.draw_rounded_border(buf, Style::new().fg(t.text_muted).bg(t.background));
+    buf.draw_str(frame.inner_x, frame.modal.y + 1, "Select Browser Mode",
         Style::new().fg(t.primary).bg(t.background).add_modifier(TextAttributes::bold()));
 
-    // Items starting at y+3
     let start_y = frame.modal.y + 3;
     for (i, mode) in BROWSER_MODES.iter().enumerate() {
-        let row_y = start_y + i as u16;
-        let selected = i == app.browser_mode_picker_selected;
+        let selected = i == app.modals.browser_mode_picker_selected;
         let is_current = (*mode == "headless" && app.headless) || (*mode == "headed" && !app.headless);
-
         let label = match *mode {
             "headless" => "headless - no browser window (faster)",
             "headed" => "headed - show browser window",
             _ => *mode,
         };
-        let label_str = if is_current {
-            format!("{} (current)", label)
-        } else {
-            label.to_string()
-        };
-        let display = truncate_str(&label_str, frame.inner_w);
-
-        if selected {
-            for sx in (frame.modal.x + 1)..(frame.modal.right() - 1) {
-                buf.put_char(sx, row_y, ' ', Style::new().bg(t.primary).fg(t.background));
-            }
-            buf.draw_str(inner_x, row_y, display,
-                Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
-        } else {
-            let fg = if is_current { t.secondary } else { t.text };
-            buf.draw_str(inner_x, row_y, display, Style::new().fg(fg).bg(t.background));
-        }
+        let label_str = if is_current { format!("{} (current)", label) } else { label.to_string() };
+        frame.draw_item_with_marker(buf, start_y + i as u16, &label_str, selected, is_current, t);
     }
 }
 
@@ -1300,7 +986,7 @@ pub fn render_doctor_modal(
     let modal_w = (area.width * 8 / 10).clamp(52, 80);
     const CONTENT_ROWS: usize = 12;
     let modal_h = ((CONTENT_ROWS + 6) as u16).max(10).min(area.height.saturating_sub(2));
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     let inner_w = frame.inner_w;
     let inner_x = frame.inner_x;
 
@@ -1376,9 +1062,7 @@ pub fn render_doctor_modal(
         let row_fg = if selected { t.text } else { fg };
 
         if selected {
-            for sx in inner_x..frame.modal.right() - 1 {
-                buf.put_char(sx, y, ' ', Style::new().bg(bg));
-            }
+            frame.draw_row_highlighted(buf, y, Style::new().bg(bg));
             buf.put_char(inner_x, y, '\u{25b6}', Style::new().fg(t.primary).bg(bg));
         }
 
@@ -1411,14 +1095,13 @@ pub fn render_doctor_modal(
 pub fn render_memory_system_picker(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
 
-    if let Some(AppModal::MemorySystemPicker { ref systems, ref selected }) = app.active_modal {
+    if let Some(AppModal::MemorySystemPicker { ref systems, ref selected }) = app.modals.active {
         const NUM_VISIBLE: usize = 5;
         let visible = systems.len().min(NUM_VISIBLE);
         let modal_w: u16 = 40;
         let modal_h = (4u16 + visible as u16).min(area.height.saturating_sub(2));
-        let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+        let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
         let inner_x = frame.inner_x;
-        let inner_w = frame.inner_w;
 
         draw_rounded_border(buf, frame.modal, Style::new().fg(t.text_muted).bg(t.background));
 
@@ -1434,14 +1117,12 @@ pub fn render_memory_system_picker(buf: &mut CellBuffer, area: Rect, app: &App) 
             }
 
             let is_selected = i == *selected;
-            let bg = if is_selected { t.primary } else { t.background };
+            if is_selected {
+                frame.draw_row_highlighted(buf, y, Style::new().bg(t.primary).fg(t.background));
+            }
             let fg = if is_selected { t.background } else { t.text };
-
-            buf.draw_str(inner_x, y, " ", Style::new().fg(t.text).bg(t.background));
-            buf.draw_str(inner_x + 1, y, system, Style::new().fg(fg).bg(bg).add_modifier(TextAttributes::bold()));
-            let padding = inner_w.saturating_sub(4 + system.len());
-            buf.draw_str(inner_x + 2 + system.len() as u16, y, &" ".repeat(padding),
-                Style::new().fg(t.text).bg(t.background));
+            let bg = if is_selected { t.primary } else { t.background };
+            buf.draw_str(inner_x, y, system, Style::new().fg(fg).bg(bg).add_modifier(TextAttributes::bold()));
 
             y += 1;
         }
@@ -1456,7 +1137,7 @@ pub fn render_memory_system_picker(buf: &mut CellBuffer, area: Rect, app: &App) 
 pub fn render_memory_menu(buf: &mut CellBuffer, area: Rect, app: &App) {
     let t = &app.theme;
 
-    if let Some(AppModal::MemoryMenu { ref selected }) = app.active_modal {
+    if let Some(AppModal::MemoryMenu { ref selected }) = app.modals.active {
         const MENU_OPTIONS: &[&str] = &[
             "View Memory Stats",
             "Switch Memory System",
@@ -1466,9 +1147,8 @@ pub fn render_memory_menu(buf: &mut CellBuffer, area: Rect, app: &App) {
         let visible = MENU_OPTIONS.len().min(NUM_VISIBLE);
         let modal_w: u16 = 40;
         let modal_h = (4u16 + visible as u16).min(area.height.saturating_sub(2));
-        let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+        let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
         let inner_x = frame.inner_x;
-        let inner_w = frame.inner_w;
 
         draw_rounded_border(buf, frame.modal, Style::new().fg(t.text_muted).bg(t.background));
 
@@ -1484,14 +1164,12 @@ pub fn render_memory_menu(buf: &mut CellBuffer, area: Rect, app: &App) {
             }
 
             let is_selected = i == *selected;
-            let bg = if is_selected { t.primary } else { t.background };
+            if is_selected {
+                frame.draw_row_highlighted(buf, y, Style::new().bg(t.primary).fg(t.background));
+            }
             let fg = if is_selected { t.background } else { t.text };
-
-            buf.draw_str(inner_x, y, " ", Style::new().fg(t.text).bg(t.background));
-            buf.draw_str(inner_x + 1, y, option, Style::new().fg(fg).bg(bg).add_modifier(TextAttributes::bold()));
-            let padding = inner_w.saturating_sub(4 + option.len());
-            buf.draw_str(inner_x + 2 + option.len() as u16, y, &" ".repeat(padding),
-                Style::new().fg(t.text).bg(t.background));
+            let bg = if is_selected { t.primary } else { t.background };
+            buf.draw_str(inner_x, y, option, Style::new().fg(fg).bg(bg).add_modifier(TextAttributes::bold()));
 
             y += 1;
         }
@@ -1516,7 +1194,7 @@ pub fn render_update_available_modal(buf: &mut CellBuffer, area: Rect, app: &App
         ref notes_scroll,
         ref installing,
         ref install_progress,
-    }) = app.active_modal
+    }) = app.modals.active
     {
         const NUM_VISIBLE_NOTES: usize = 15;
         const NOTES_WIDTH: u16 = 70;
@@ -1542,7 +1220,7 @@ pub fn render_update_available_modal(buf: &mut CellBuffer, area: Rect, app: &App
         let base_h = if *installing { 8 } else { 10 };
         let modal_h = base_h + content_h + 2;
 
-        let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+        let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
         let inner_x = frame.inner_x;
         let inner_w = frame.inner_w;
         let mut y = frame.modal.y + 2;
@@ -1659,7 +1337,7 @@ pub fn render_onboarding_wizard(buf: &mut CellBuffer, area: Rect, app: &App, ste
     let modal_w: u16 = 62;
     let modal_h: u16 = 18;
 
-    let frame = ModalFrame::new(buf, area, app, modal_w, modal_h);
+    let frame = ModalFrame::new(buf, area, &app.theme, modal_w, modal_h);
     frame.draw_border(buf, Style::new().fg(t.primary), Style::new().fg(t.border));
 
     let title = match step {
@@ -1706,19 +1384,19 @@ pub fn render_onboarding_wizard(buf: &mut CellBuffer, area: Rect, app: &App, ste
             buf.draw_str(inner_x, y, "Pick your AI provider:",
                 Style::new().fg(t.text).bg(t.background));
 
-            let providers: Vec<String> = app.available_providers.iter().map(|p| p.name.clone()).collect();
+            let providers: Vec<String> = app.modals.available_providers.iter().map(|p| p.name.clone()).collect();
 
             if providers.is_empty() {
                 buf.draw_str(inner_x, y + 2, "  Connecting to backend...",
                     Style::new().fg(t.text_muted).bg(t.background));
             } else {
                 let visible = 10usize;
-                let start = app.provider_picker_scroll.min(providers.len().saturating_sub(visible));
+                let start = app.modals.provider_picker_scroll.min(providers.len().saturating_sub(visible));
             let end = (start + visible).min(providers.len());
 
             for (i, name) in providers[start..end].iter().enumerate() {
                 let idx = start + i;
-                let selected = idx == app.provider_picker_idx;
+                let selected = idx == app.modals.provider_picker_idx;
                 let row_y = y + 2 + i as u16;
 
                 let prefix = if selected { "\u{25b6} " } else { "  " };
@@ -1746,12 +1424,12 @@ pub fn render_onboarding_wizard(buf: &mut CellBuffer, area: Rect, app: &App, ste
         }
         _ => {
             let y = frame.modal.y + 2;
-            buf.draw_str(inner_x, y, &format!("Provider: {}", app.onboarding_provider),
+            buf.draw_str(inner_x, y, &format!("Provider: {}", app.modals.onboarding_provider),
                 Style::new().fg(t.secondary).bg(t.background).add_modifier(TextAttributes::bold()));
             buf.draw_str(inner_x, y + 2, "Enter your API key:",
                 Style::new().fg(t.text).bg(t.background));
 
-            let masked = if app.api_key_input.is_empty() {
+            let masked = if app.modals.api_key_input.is_empty() {
                 "sk-...".to_string()
             } else {
                 "\u{2022}".repeat(16)
@@ -1776,4 +1454,337 @@ pub fn render_onboarding_wizard(buf: &mut CellBuffer, area: Rect, app: &App, ste
     }).collect();
     let dots_str = format!("  {}", step_dots);
     buf.draw_str(dots_x, dots_y, &dots_str, Style::new().fg(t.text_muted).bg(t.background));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::App;
+    use sediman_tui_bridge::ApiClient;
+
+    fn test_app() -> App {
+        App::new("test".into(), Some("gpt-4".into()), None, true, ApiClient::new("/tmp/test_opencode.sock"))
+    }
+
+    fn render_area() -> Rect {
+        Rect::new(0, 0, 80, 24)
+    }
+
+    fn find_char(buf: &CellBuffer, ch: char) -> bool {
+        for y in 0..buf.height() {
+            for x in 0..buf.width() {
+                if let Some(cell) = buf.get(x, y) {
+                    if cell.ch == ch { return true; }
+                }
+            }
+        }
+        false
+    }
+
+    fn find_str(buf: &CellBuffer, s: &str) -> bool {
+        let chars: Vec<char> = s.chars().collect();
+        if chars.is_empty() { return true; }
+        'outer: for y in 0..buf.height() {
+            for start_x in 0..buf.width() {
+                let mut found = true;
+                for (i, &expected) in chars.iter().enumerate() {
+                    let x = start_x as usize + i;
+                    if x >= buf.width() as usize { continue 'outer; }
+                    match buf.get(x as u16, y) {
+                        Some(cell) if cell.ch == expected => {}
+                        _ => { found = false; break; }
+                    }
+                }
+                if found { return true; }
+            }
+        }
+        false
+    }
+
+    fn find_highlighted(buf: &CellBuffer, color: sediman_tui_core::renderer::Color) -> bool {
+        for y in 0..buf.height() {
+            for x in 0..buf.width() {
+                if let Some(cell) = buf.get(x, y) {
+                    if cell.style.bg == Some(color) { return true; }
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn test_render_help_modal_has_title() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_help_modal(&mut buf, render_area(), &app, 0);
+        assert!(find_str(&buf, "Commands"), "Help modal should contain 'Commands'");
+    }
+
+    #[test]
+    fn test_render_help_modal_has_border() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_help_modal(&mut buf, render_area(), &app, 0);
+        assert!(find_char(&buf, '\u{2500}'), "Help modal should have a border");
+    }
+
+    #[test]
+    fn test_render_help_modal_scrolls() {
+        let mut buf1 = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_help_modal(&mut buf1, render_area(), &app, 0);
+        let has_general = find_str(&buf1, "General");
+        let mut buf2 = CellBuffer::new(80, 24);
+        render_help_modal(&mut buf2, render_area(), &app, 100);
+        let has_general_scrolled = find_str(&buf2, "General");
+        assert_ne!(has_general, has_general_scrolled, "Scrolling should change rendered content");
+    }
+
+    #[test]
+    fn test_render_model_dialog_has_title() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.model_dialog_scroll = 0;
+        app.modals.model_dialog_model_idx = 0;
+        render_model_dialog(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "Select Model"), "Model dialog should show 'Select Model' title");
+    }
+
+    #[test]
+    fn test_render_model_dialog_has_separator() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_model_dialog(&mut buf, render_area(), &app);
+        assert!(find_char(&buf, '\u{2500}'), "Model dialog should have a separator");
+    }
+
+    #[test]
+    fn test_render_coder_picker_shows_options() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.coder_picker_selected = 0;
+        app.agent.coder_backend = "internal".to_string();
+        render_coder_picker(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "internal"), "Coder picker should show 'internal' option");
+    }
+
+    #[test]
+    fn test_render_coder_picker_highlights_selected() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.coder_picker_selected = 1;
+        app.agent.coder_backend = "internal".to_string();
+        render_coder_picker(&mut buf, render_area(), &app);
+        assert!(find_highlighted(&buf, app.theme.primary), "Coder picker should highlight selected item");
+    }
+
+    #[test]
+    fn test_render_search_mode_picker_has_description() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.search_mode_picker_selected = 0;
+        app.agent.search_mode = "auto".to_string();
+        render_search_mode_picker(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "Auto"), "Search mode picker should show description");
+    }
+
+    #[test]
+    fn test_render_browser_mode_picker() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.browser_mode_picker_selected = 0;
+        app.headless = true;
+        render_browser_mode_picker(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "headless"), "Browser mode picker should show 'headless' option");
+    }
+
+    #[test]
+    fn test_render_api_key_prompt_shows_label() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.connect_target = Some("OpenAI".to_string());
+        app.modals.connect_is_integration = false;
+        app.modals.api_key_input = String::new();
+        render_api_key_prompt(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "Enter"), "API key prompt should show 'Enter' label");
+    }
+
+    #[test]
+    fn test_render_api_key_prompt_shows_placeholder() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.connect_target = Some("OpenAI".to_string());
+        app.modals.connect_is_integration = false;
+        app.modals.api_key_input = String::new();
+        render_api_key_prompt(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "k-"), "API key prompt should show 'sk-...' placeholder");
+    }
+
+    #[test]
+    fn test_render_memory_editor_shows_title() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.memory_editor_input = String::new();
+        app.modals.memory_entries = vec![];
+        render_memory_editor(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "Memory"), "Memory editor should show 'Memory' title");
+    }
+
+    #[test]
+    fn test_render_memory_editor_shows_input_row() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.memory_editor_input = String::new();
+        app.modals.memory_entries = vec![];
+        render_memory_editor(&mut buf, render_area(), &app);
+        assert!(find_char(&buf, '\u{276f}'), "Memory editor should show input prompt");
+    }
+
+    #[test]
+    fn test_render_memory_editor_shows_entries() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.memory_editor_input = String::new();
+        app.modals.memory_entries = vec![
+            ("user".to_string(), "remember this".to_string()),
+            ("agent".to_string(), "noted that".to_string()),
+        ];
+        app.modals.memory_editor_index = 0;
+        render_memory_editor(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "[user]"), "Memory editor should show entries with tags");
+    }
+
+    #[test]
+    fn test_render_memory_editor_has_footer() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.memory_editor_input = String::new();
+        app.modals.memory_entries = vec![];
+        render_memory_editor(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "Enter"), "Memory editor should show footer hints");
+    }
+
+    #[test]
+    fn test_render_soul_editor_has_title() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.soul_editor_input = String::new();
+        render_soul_editor(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "Soul"), "Soul editor should show 'Soul' title");
+    }
+
+    #[test]
+    fn test_render_soul_editor_empty_shows_default() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.soul_editor_input = String::new();
+        render_soul_editor(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "Default"), "Soul editor should show 'Default' when empty");
+    }
+
+    #[test]
+    fn test_render_soul_editor_with_input() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.soul_editor_input = "You are helpful".to_string();
+        render_soul_editor(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "Current"), "Soul editor should show 'Current' when has input");
+    }
+
+    #[test]
+    fn test_render_theme_picker_shows_themes() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.theme_picker_names = vec!["default".to_string(), "dracula".to_string()];
+        app.modals.theme_picker_selected = 0;
+        app.theme_name = "default".to_string();
+        render_theme_picker(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "default"), "Theme picker should show 'default' theme");
+    }
+
+    #[test]
+    fn test_render_theme_picker_highlights_selected() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.theme_picker_names = vec!["default".to_string()];
+        app.modals.theme_picker_selected = 0;
+        app.theme_name = "default".to_string();
+        render_theme_picker(&mut buf, render_area(), &app);
+        assert!(find_highlighted(&buf, app.theme.primary), "Theme picker should highlight selected theme");
+    }
+
+    #[test]
+    fn test_render_schedule_browser_empty() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.schedule_input = String::new();
+        app.modals.schedule_jobs = vec![];
+        render_schedule_browser(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "No scheduled"), "Schedule browser should show empty message");
+    }
+
+    #[test]
+    fn test_render_session_browser_empty() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.session_filter = String::new();
+        app.modals.session_list = vec![];
+        render_session_browser(&mut buf, render_area(), &app);
+        assert!(find_str(&buf, "No sessions"), "Session browser should show empty message");
+    }
+
+    #[test]
+    fn test_render_info_modal_renders_lines() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        let lines = vec![
+            crate::app::ModalLine::new("Hello World", crate::app::ModalLineStyle::Normal),
+            crate::app::ModalLine::new("Important", crate::app::ModalLineStyle::Accent),
+        ];
+        render_info_modal(&mut buf, render_area(), &app, "Test", &lines, 0);
+        assert!(find_str(&buf, "Hello"), "Info modal should render text lines");
+    }
+
+    #[test]
+    fn test_render_info_modal_applies_styles() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        let lines = vec![
+            crate::app::ModalLine::new("NormalTxt", crate::app::ModalLineStyle::Normal),
+            crate::app::ModalLine::new("AccentTxt", crate::app::ModalLineStyle::Accent),
+        ];
+        render_info_modal(&mut buf, render_area(), &app, "Test", &lines, 0);
+        let mut found_bold = false;
+        for y in 0..buf.height() {
+            for x in 0..buf.width() {
+                if let Some(cell) = buf.get(x, y) {
+                    if cell.ch == 'A' && cell.style.attrs.bold { found_bold = true; }
+                }
+            }
+        }
+        assert!(found_bold, "Info modal accent style should be bold");
+    }
+
+    #[test]
+    fn test_modal_frame_is_centered() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.modals.coder_picker_selected = 0;
+        app.agent.coder_backend = "internal".to_string();
+        render_coder_picker(&mut buf, render_area(), &app);
+        let mut leftmost = 80u16;
+        let mut rightmost = 0u16;
+        for x in 0..80u16 {
+            for y in 0..24u16 {
+                if let Some(cell) = buf.get(x, y) {
+                    if cell.ch != '\0' && cell.ch != ' ' {
+                        leftmost = leftmost.min(x);
+                        rightmost = rightmost.max(x);
+                    }
+                }
+            }
+        }
+        let center = (leftmost + rightmost) / 2;
+        assert!(center > 20 && center < 60, "Modal should be roughly centered (center={})", center);
+    }
 }

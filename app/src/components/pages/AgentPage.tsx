@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from 'react';
-import { Send, Plus, Moon, Sun } from 'lucide-react';
+import { Send, Plus, Moon, Sun, Monitor } from 'lucide-react';
 import { useAppStore } from '@/stores/useAppStore';
 import { useChatStore } from '@/stores/useChatStore';
+import { useSandboxStore } from '@/stores/useSandboxStore';
 import { getChatService } from '@/services/chatService';
-import { PageHeader } from '@/components/shared/PageHeader';
 import { Button } from '@/components/shared/Button';
 import { Textarea } from '@/components/shared/Textarea';
 import { ScrollArea } from '@/components/shared/ScrollArea';
@@ -21,6 +21,10 @@ export function AgentPage() {
   const appendToMessage = useChatStore((state) => state.appendToMessage);
   const theme = useAppStore((state) => state.theme);
   const toggleTheme = useAppStore((state) => state.toggleTheme);
+
+  // Sandbox store
+  const sandboxOpen = useSandboxStore((state) => state.isOpen);
+  const toggleSandbox = useSandboxStore((state) => state.togglePanel);
 
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -175,6 +179,17 @@ export function AgentPage() {
       <div className="h-10 border-b border-border flex items-center justify-between px-3">
         <h1 className="text-xs font-medium">Chat</h1>
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={toggleSandbox}
+            className={cn(
+              "h-6 w-6 shrink-0 p-0",
+              sandboxOpen && "bg-accent"
+            )}
+          >
+            <Monitor className="w-3 h-3" />
+          </Button>
           <Button variant="ghost" size="sm" onClick={toggleTheme} className="h-6 w-6 shrink-0 p-0">
             {theme === 'dark' ? <Sun className="w-3 h-3" /> : <Moon className="w-3 h-3" />}
           </Button>
@@ -248,7 +263,7 @@ export function AgentPage() {
       </ScrollArea>
 
       {/* Input */}
-      <div className="border-t border-border p-2">
+      <div className="border-t border-border p-2 min-h-[38px]">
         <div className="max-w-3xl mx-auto flex gap-2">
           <Textarea
             ref={textareaRef}

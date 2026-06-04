@@ -8,7 +8,9 @@ mod sidebar;
 mod input;
 
 use sediman_tui_core::renderer::CellBuffer;
+use sediman_tui_core::component::fill_row;
 use crate::app::{App, AppModal};
+use crate::constants::*;
 
 pub fn render_into(buf: &mut CellBuffer, app: &mut App) {
     let area = buf.area();
@@ -17,11 +19,11 @@ pub fn render_into(buf: &mut CellBuffer, app: &mut App) {
 
     // Dynamically expand input area based on visual lines (accounts for wrapping)
     // Approximate inner width: total width minus borders(2) + badge(~8) + padding(2)
-    let approx_inner = area.width.saturating_sub(12) as usize;
+    let approx_inner = area.width.saturating_sub(INPUT_INNER_WIDTH_SUBTRACT as u16) as usize;
     let editor_lines = app.editor.visual_lines(approx_inner).max(1) as u16;
-    let needed = editor_lines + 3;
-    let max_input = area.height.saturating_sub(3).max(3);
-    app.layout.input_lines = needed.clamp(3, 15).min(max_input);
+    let needed = editor_lines + INPUT_ROW_OVERHEAD;
+    let max_input = area.height.saturating_sub(INPUT_ROW_OVERHEAD).max(INPUT_MIN_LINES);
+    app.layout.input_lines = needed.clamp(INPUT_MIN_LINES, INPUT_MAX_LINES).min(max_input);
 
     let show_side = app.show_side_panel;
     app.layout.show_side_panel = show_side;
@@ -37,7 +39,7 @@ pub fn render_into(buf: &mut CellBuffer, app: &mut App) {
     status_bar::render_status_bar(buf, zones.status_bar, app);
     input::render_input(buf, zones.input, app);
 
-    if let Some(ref modal) = app.active_modal {
+    if let Some(ref modal) = app.modals.active {
         match modal {
             AppModal::Help { scroll } => modals::render_help_modal(buf, zones.main, app, *scroll as usize),
             AppModal::ModelPicker => modals::render_model_dialog(buf, zones.main, app),
@@ -78,15 +80,11 @@ pub fn render_into(buf: &mut CellBuffer, app: &mut App) {
         use sediman_tui_core::renderer::{Style, TextAttributes, display_width};
         let t = &app.theme;
         let text = &app.toast_text;
-        let tw = display_width(text) + 4;
+        let tw = display_width(text) + TOAST_PADDING;
         let toast_area = buf.area();
         let tx = toast_area.x + (toast_area.width.saturating_sub(tw)) / 2;
         let ty = zones.status_bar.y.saturating_sub(1).max(zones.main.y);
-        for sx in tx..tx + tw {
-            if sx < toast_area.right() {
-                buf.put_char(sx, ty, ' ', Style::new().bg(t.primary).fg(t.background));
-            }
-        }
+        fill_row(buf, ty, tx, (tx + tw).min(toast_area.right()), Style::new().bg(t.primary).fg(t.background));
         buf.draw_str_clipped(zones.main, tx + 2, ty, text, Style::new().bg(t.primary).fg(t.background).add_modifier(TextAttributes::bold()));
     }
 }

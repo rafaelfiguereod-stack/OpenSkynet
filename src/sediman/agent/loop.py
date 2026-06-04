@@ -1187,83 +1187,175 @@ class AgentLoop:
             metadata={"strategy": step.strategy.value, "retries": step.retries},
         )
 
-    async def _reflect_on_step(
-        self, state: AgentState, step: PlanStep, observation: Observation
-    ) -> Reflection | None:
-        from sediman.agent.guardrails import AuditLog
+    def _has_data_values(self, text: str) -> bool:
+        """Check if text contains data values (numbers, URLs, emails)."""
+        import re as _re
+        if _re.search(r'\d+\.?\d*', text):
+            return True
+        if _re.search(r'https?://\S+', text):
+            return True
+        if _re.search(r'[\w.-]+@[\w.-]+', text):
+            return True
+        return False
 
-        content = observation.content or ""
-
-        def _has_data_values(text: str) -> bool:
-            import re as _re
-            if _re.search(r'\d+\.?\d*', text):
-                return True
-            if _re.search(r'https?://\S+', text):
-                return True
-            if _re.search(r'[\w.-]+@[\w.-]+', text):
-                return True
-            return False
-
-        has_done_action = any(
+    def _has_done_action(self, state: AgentState) -> bool:
+        """Check if recent actions include a done action."""
+        return any(
             a.get("action") == "done" or a.get("type") == "done"
             for a in state.actions_taken[-5:]
         )
+
+    def _should_reflect_single_step(self, state: AgentState, step: PlanStep, observation: Observation) -> bool:
+        """Check if this is a single-step plan that needs reflection."""
+        return (
+            len(state.plan_steps) == 1
+            and observation.success
+            and not state.errors
+        )
+
+    def _try_single_step_completion(self, state: AgentState, step: PlanStep, observation: Observation) -> Reflection | None:
+        """Try to complete a single-step plan without LLM reflection."""
+        from sediman.agent.guardrails import AuditLog
+
+        content = observation.content or ""
+        has_done_action = self._has_done_action(state)
         has_error_indicators = self._looks_like_error(content)
 
-        if len(state.plan_steps) == 1 and observation.success and not state.errors:
-            if _has_data_values(content) and len(content) > 80:
-                AuditLog.get().record("reflection", "single_step_fast_path", "single-step success with data", step=step.id)
-                return Reflection(
-                    task_complete=True,
-                    confidence=0.75,
-                    reasoning="Single-step plan completed with grounded data.",
-                    should_retry=False,
-                    should_replan=False,
-                )
-            elif has_done_action and not has_error_indicators and len(content) > 40:
-                AuditLog.get().record("reflection", "single_step_done", "single-step with done action", step=step.id)
-                return Reflection(
-                    task_complete=True,
-                    confidence=0.70,
-                    reasoning="Single-step plan completed, browser reported done, no errors.",
-                    should_retry=False,
-                    should_replan=False,
-                )
-            elif not state.errors and step.retries == 0:
-                AuditLog.get().record("reflection", "single_step_verify", "single-step but no grounded data, verifying", step=step.id)
-
-        if self._skip_reflection_on_success:
-            if (
-                observation.success
-                and has_done_action
-                and len(content) > 80
-                and not state.errors
-                and not has_error_indicators
-                and step.retries == 0
-                and _has_data_values(content)
-            ):
-                AuditLog.get().record("reflection", "fast_path_success", "done_action_with_data", step=step.id)
-                return Reflection(
-                    task_complete=True,
-                    confidence=0.70,
-                    reasoning="Fast-path: browser reported done with grounded data, no errors.",
-                    should_retry=False,
-                    should_replan=False,
-                )
-
-        if not observation.success and self._looks_like_error(content):
-            from sediman.agent.guardrails import AuditLog
-            AuditLog.get().record("reflection", "fast_path_error", "error_indicators_detected", step=step.id)
-            should_retry = step.retries < step.max_retries
+        # Single step with grounded data
+        if self._has_data_values(content) and len(content) > 80:
+            AuditLog.get().record("reflection", "single_step_fast_path", "single-step success with data", step=step.id)
             return Reflection(
-                task_complete=False,
-                confidence=0.15,
-                reasoning=f"Error fast-path: result contains error indicators.",
-                should_retry=should_retry,
-                should_replan=not should_retry and state.iteration < state.max_iterations,
-                retry_context=f"Error detected: {content[:200]}",
+                task_complete=True,
+                confidence=0.75,
+                reasoning="Single-step plan completed with grounded data.",
+                should_retry=False,
+                should_replan=False,
             )
 
+        # Single step with done action
+        if has_done_action and not has_error_indicators and len(content) > 40:
+            AuditLog.get().record("reflection", "single_step_done", "single-step with done action", step=step.id)
+            return Reflection(
+                task_complete=True,
+                confidence=0.70,
+                reasoning="Single-step plan completed, browser reported done, no errors.",
+                should_retry=False,
+                should_replan=False,
+            )
+
+        # Single step but needs verification
+        if not state.errors and step.retries == 0:
+            AuditLog.get().record("reflection", "single_step_verify", "single-step but no grounded data, verifying", step=step.id)
+
+        return None
+
+    def _try_fast_path_success(self, state: AgentState, step: PlanStep, observation: Observation) -> Reflection | None:
+        """Try fast path for successful observations."""
+        from sediman.agent.guardrails import AuditLog
+
+        content = observation.content or ""
+        has_done_action = self._has_done_action(state)
+        has_error_indicators = self._looks_like_error(content)
+
+        if not (
+            observation.success
+            and has_done_action
+            and len(content) > 80
+            and not state.errors
+            and not has_error_indicators
+            and step.retries == 0
+            and self._has_data_values(content)
+        ):
+            return None
+
+        AuditLog.get().record("reflection", "fast_path_success", "done_action_with_data", step=step.id)
+        return Reflection(
+            task_complete=True,
+            confidence=0.70,
+            reasoning="Fast-path: browser reported done with grounded data, no errors.",
+            should_retry=False,
+            should_replan=False,
+        )
+
+    def _try_error_detection(self, content: str, step: PlanStep, observation: Observation, state: AgentState) -> Reflection | None:
+        """Try to detect errors and provide appropriate reflection."""
+        from sediman.agent.guardrails import AuditLog
+
+        if not (not observation.success and self._looks_like_error(content)):
+            return None
+
+        AuditLog.get().record("reflection", "fast_path_error", "error_indicators_detected", step=step.id)
+        should_retry = step.retries < step.max_retries
+        return Reflection(
+            task_complete=False,
+            confidence=0.15,
+            reasoning=f"Error fast-path: result contains error indicators.",
+            should_retry=should_retry,
+            should_replan=not should_retry and state.iteration < state.max_iterations,
+            retry_context=f"Error detected: {content[:200]}",
+        )
+
+    def _try_task_keyword_match(self, state: AgentState, observation: Observation) -> Reflection | None:
+        """Try to match task keywords in content."""
+        from sediman.agent.guardrails import AuditLog
+
+        content = observation.content or ""
+        task_lower = state.task.lower()
+        task_words = [w for w in task_lower.split() if len(w) > 3 and w not in (
+            "check", "find", "search", "look", "what", "show", "tell", "please",
+            "could", "would", "about", "from", "with", "that", "this",
+        )]
+
+        if not task_words:
+            return None
+
+        has_err = self._looks_like_error(content)
+        if not (observation.success and not has_err and len(content) > 150 and self._has_data_values(content)):
+            return None
+
+        content_lower = content.lower()
+        matched = sum(1 for w in task_words if w in content_lower)
+        threshold = max(3, len(task_words) * 3 // 4)
+
+        if matched >= threshold:
+            AuditLog.get().record("reflection", "data_match", f"{matched}/{len(task_words)} keywords", step.id)
+            return Reflection(
+                task_complete=True,
+                confidence=0.7,
+                reasoning=f"Data-match: {matched}/{len(task_words)} task keywords found with grounded values.",
+                should_retry=False,
+                should_replan=False,
+            )
+
+        return None
+
+    async def _reflect_on_step(
+        self, state: AgentState, step: PlanStep, observation: Observation
+    ) -> Reflection | None:
+        """Reflect on step execution and provide guidance."""
+        from sediman.agent.guardrails import AuditLog
+
+        content = observation.content or ""
+        has_error_indicators = self._looks_like_error(content)
+
+        # Try single-step completion first
+        if self._should_reflect_single_step(state, step, observation):
+            reflection = self._try_single_step_completion(state, step, observation)
+            if reflection:
+                return reflection
+
+        # Try fast path for successful observations
+        if self._skip_reflection_on_success:
+            reflection = self._try_fast_path_success(state, step, observation)
+            if reflection:
+                return reflection
+
+        # Try error detection
+        reflection = self._try_error_detection(content, step, observation, state)
+        if reflection:
+            return reflection
+
+        # Handle failed observations
         if not observation.success:
             should_retry = step.retries < step.max_retries
             return Reflection(
@@ -1275,6 +1367,7 @@ class AgentLoop:
                 retry_context=f"Observation marked as failed: {content[:200]}",
             )
 
+        # Check content length
         if len(content) < 80:
             return Reflection(
                 task_complete=False,
@@ -1284,28 +1377,20 @@ class AgentLoop:
                 retry_context="Previous attempt produced insufficient output.",
             )
 
-        task_lower = state.task.lower()
-        task_words = [w for w in task_lower.split() if len(w) > 3 and w not in (
-            "check", "find", "search", "look", "what", "show", "tell", "please",
-            "could", "would", "about", "from", "with", "that", "this",
-        )]
-        has_err = self._looks_like_error(content)
-        if task_words and observation.success and not has_err and len(content) > 150 and _has_data_values(content):
-            content_lower = content.lower()
-            matched = sum(1 for w in task_words if w in content_lower)
-            threshold = max(3, len(task_words) * 3 // 4)
-            if matched >= threshold:
-                AuditLog.get().record("reflection", "data_match", f"{matched}/{len(task_words)} keywords", step=step.id)
-                return Reflection(
-                    task_complete=True,
-                    confidence=0.7,
-                    reasoning=f"Data-match: {matched}/{len(task_words)} task keywords found with grounded values.",
-                    should_retry=False,
-                    should_replan=False,
-                )
+        # Try task keyword matching
+        reflection = self._try_task_keyword_match(state, observation)
+        if reflection:
+            return reflection
 
-        if len(content) > 80 and observation.success and step.retries == 0 and not state.errors and not has_err:
+        # Fall through to LLM reflection
+        if len(content) > 80 and observation.success and step.retries == 0 and not state.errors and not has_error_indicators:
             AuditLog.get().record("reflection", "llm_reflect", "falling_through_to_llm", step=step.id, content_len=len(content))
+
+        return await self._llm_reflection(state, step, observation)
+
+    async def _llm_reflection(self, state: AgentState, step: PlanStep, observation: Observation) -> Reflection:
+        """Perform LLM-based reflection."""
+        from sediman.agent.guardrails import AuditLog
 
         try:
             result = await self._manager.reflect(
@@ -1344,7 +1429,6 @@ class AgentLoop:
             )
         except Exception as e:
             logger.warning("reflection_failed", error=str(e))
-            from sediman.agent.guardrails import AuditLog
             AuditLog.get().record("reflection", "failed", str(e), step_id=step.id)
             return Reflection(
                 task_complete=False,

@@ -37,8 +37,12 @@ pub fn run() {
     let socket_path = std::env::var("SEDIMAN_PYTHON_SOCKET")
         .unwrap_or_else(|_| "/tmp/sediman-python.sock".to_string());
 
-    tokio::spawn(async move {
-        websocket_proxy::run_websocket_proxy(socket_path).await;
+    // Spawn WebSocket proxy in a blocking task to keep it alive
+    std::thread::spawn(move || {
+        let rt = tokio::runtime::Runtime::new().expect("Failed to create Tokio runtime");
+        rt.block_on(async {
+            websocket_proxy::run_websocket_proxy(socket_path).await;
+        });
     });
 
     tauri::Builder::default()

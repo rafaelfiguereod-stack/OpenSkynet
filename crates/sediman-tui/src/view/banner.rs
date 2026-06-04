@@ -82,3 +82,105 @@ pub fn render_idle(buf: &mut CellBuffer, area: Rect, app: &App) {
     buf.draw_str(area.x + 2, area.y, "ready \u{2014} type a task or /help",
         Style::new().fg(app.theme.text_muted).add_modifier(TextAttributes::italic()));
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::app::App;
+    use sediman_tui_bridge::ApiClient;
+
+    fn test_app() -> App {
+        App::new("test".into(), Some("gpt-4".into()), None, true, ApiClient::new("/tmp/test_opencode.sock"))
+    }
+
+    fn find_str(buf: &CellBuffer, s: &str) -> bool {
+        let chars: Vec<char> = s.chars().collect();
+        if chars.is_empty() { return true; }
+        'outer: for y in 0..buf.height() {
+            for start_x in 0..buf.width() {
+                let mut found = true;
+                for (i, &expected) in chars.iter().enumerate() {
+                    let x = start_x as usize + i;
+                    if x >= buf.width() as usize { continue 'outer; }
+                    match buf.get(x as u16, y) {
+                        Some(cell) if cell.ch == expected => {}
+                        _ => { found = false; break; }
+                    }
+                }
+                if found { return true; }
+            }
+        }
+        false
+    }
+
+    fn find_char(buf: &CellBuffer, ch: char) -> bool {
+        for y in 0..buf.height() {
+            for x in 0..buf.width() {
+                if let Some(cell) = buf.get(x, y) {
+                    if cell.ch == ch { return true; }
+                }
+            }
+        }
+        false
+    }
+
+    #[test]
+    fn test_banner_shows_welcome_text() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_banner(&mut buf, Rect::new(0, 0, 80, 24), &app);
+        assert!(find_str(&buf, "Your Terminator."), "should show welcome text");
+    }
+
+    #[test]
+    fn test_banner_shows_hint_text() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_banner(&mut buf, Rect::new(0, 0, 80, 24), &app);
+        assert!(find_str(&buf, "/help"), "should show /help hint");
+    }
+
+    #[test]
+    fn test_banner_shows_browser_status_headless() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_banner(&mut buf, Rect::new(0, 0, 80, 24), &app);
+        assert!(find_str(&buf, "Browser"), "should show Browser label");
+        assert!(find_str(&buf, "headless"), "should show headless when app.headless is true");
+    }
+
+    #[test]
+    fn test_banner_shows_browser_status_headed() {
+        let mut buf = CellBuffer::new(80, 24);
+        let mut app = test_app();
+        app.headless = false;
+        render_banner(&mut buf, Rect::new(0, 0, 80, 24), &app);
+        assert!(find_str(&buf, "headed + vision"), "should show headed + vision when headless is false");
+    }
+
+    #[test]
+    fn test_banner_shows_path_label() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_banner(&mut buf, Rect::new(0, 0, 80, 24), &app);
+        assert!(find_str(&buf, "Path"), "should show Path label");
+    }
+
+    #[test]
+    fn test_banner_shows_top_and_bottom_borders() {
+        let mut buf = CellBuffer::new(80, 24);
+        let app = test_app();
+        render_banner(&mut buf, Rect::new(0, 0, 80, 24), &app);
+        assert!(find_char(&buf, '\u{25c6}'), "should show diamond decorations");
+        assert!(find_char(&buf, '\u{2501}'), "should show horizontal line borders");
+    }
+
+    #[test]
+    fn test_idle_renders_prompt() {
+        let mut buf = CellBuffer::new(80, 1);
+        let app = test_app();
+        render_idle(&mut buf, Rect::new(0, 0, 80, 1), &app);
+        assert!(find_str(&buf, "ready"), "idle should show ready text");
+        assert!(find_str(&buf, "/help"), "idle should show /help hint");
+    }
+}

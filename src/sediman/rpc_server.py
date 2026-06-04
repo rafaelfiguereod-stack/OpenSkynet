@@ -1330,6 +1330,432 @@ async def handle_checkpoint_list(params: dict[str, Any], notify: NotifyFn | None
     }
 
 
+# ── Sandbox Handlers ───────────────────────────────────────────────
+
+_sandbox_control_mode: str = "agent"
+
+
+async def handle_sandbox_start(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Start a sandbox session (browser or computer)."""
+    global _sandbox_control_mode
+
+    sandbox_type = params.get("type", "browser")
+    if sandbox_type not in ("browser", "computer"):
+        raise ValueError("Invalid sandbox type. Must be 'browser' or 'computer'")
+
+    # For browser sandbox, ensure browser is started
+    if sandbox_type == "browser":
+        browser = await _get_browser()
+        if not browser or not browser.is_started:
+            raise RuntimeError("Failed to start browser session")
+
+        # Initialize a page for screenshots by creating a CDP session and page
+        try:
+            # Use the browser session's screenshot method which will create a page if needed
+            # This ensures the browser has an active context for screenshots
+            session = await browser._browser.get_or_create_cdp_session()
+            if not session.agent_current_page:
+                # Create a new page if none exists
+                page = await session.new_page()
+                await page.goto("about:blank", timeout=5000)
+                logger.info("Browser initialized with blank page for screenshots")
+            # Note: Don't close the session, keep it alive for screenshot polling
+        except Exception as e:
+            logger.warning(f"Failed to initialize browser page: {e}")
+            # Continue anyway - the browser is started
+
+        _sandbox_control_mode = "agent"
+
+        return {
+            "session": {
+                "id": f"browser-{int(time.time())}",
+                "type": "browser",
+                "startedAt": int(time.time()),
+                "controlMode": "agent",
+            },
+            "status": "connected",
+        }
+    elif sandbox_type == "computer":
+        # For computer sandbox, we'd integrate with OpenSandbox
+        # For now, return an error as this requires additional setup
+        return {
+            "error": "Computer sandbox not yet implemented",
+            "session": None,
+        }
+
+
+async def handle_sandbox_stop(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Stop the current sandbox session."""
+    global _sandbox_control_mode
+    _sandbox_control_mode = "agent"
+    return {"stopped": True}
+
+
+async def handle_sandbox_status(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Get the current sandbox status."""
+    global _sandbox_control_mode
+
+    browser = _browser
+    is_browser_active = browser is not None and browser.is_started
+
+    return {
+        "isActive": is_browser_active,
+        "type": "browser",
+        "controlMode": _sandbox_control_mode,
+        "connectionStatus": "connected" if is_browser_active else "disconnected",
+        "sessionId": f"browser-active" if is_browser_active else None,
+    }
+
+
+async def handle_sandbox_set_mode(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Set the control mode for the sandbox."""
+    global _sandbox_control_mode
+
+    mode = params.get("mode", "agent")
+    if mode not in ("agent", "user", "shared"):
+        raise ValueError("Invalid control mode. Must be 'agent', 'user', or 'shared'")
+
+    _sandbox_control_mode = mode
+    return {"mode": mode}
+
+
+async def handle_sandbox_control(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Handle input events for sandbox control."""
+    global _sandbox_control_mode
+
+    # Only process user input when in user mode
+    if _sandbox_control_mode != "user":
+        logger.debug("sandbox_input_ignored", mode=_sandbox_control_mode)
+        return {"processed": False, "reason": "Not in user control mode"}
+
+    event = params.get("event", {})
+    event_type = event.get("type", "")
+    action = event.get("action", "")
+    data = event.get("data", {})
+
+    browser = await _get_browser()
+    if not browser or not browser.is_started:
+        return {"processed": False, "reason": "Browser not active"}
+
+    try:
+        # Handle mouse events
+        if event_type == "mouse":
+            if action == "click":
+                x = data.get("x", 0)
+                y = data.get("y", 0)
+                button = data.get("button", "left")
+                # Would need to implement browser control via Playwright
+                logger.debug("sandbox_mouse_click", x=x, y=y, button=button)
+                return {"processed": True}
+            elif action == "move":
+                x = data.get("x", 0)
+                y = data.get("y", 0)
+                logger.debug("sandbox_mouse_move", x=x, y=y)
+                return {"processed": True}
+
+        # Handle keyboard events
+        elif event_type == "keyboard":
+            if action == "type":
+                text = data.get("text", "")
+                logger.debug("sandbox_keyboard_type", text_length=len(text))
+                return {"processed": True}
+
+        return {"processed": False, "reason": "Unknown event type"}
+    except Exception as e:
+        logger.error("sandbox_control_error", error=str(e))
+        return {"processed": False, "reason": str(e)}
+
+
+async def handle_sandbox_test_browser(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Test browser startup and return diagnostic information."""
+    import time
+    import traceback
+
+    diagnostics = {
+        "start_time": time.time(),
+        "browser_exists": _browser is not None,
+        "browser_started": False,
+        "steps": [],
+        "errors": [],
+    }
+
+    try:
+        # Step 1: Check if browser module is available
+        diagnostics["steps"].append("Checking browser_use module...")
+        try:
+            from browser_use import Browser
+            diagnostics["steps"].append("✓ browser_use module available")
+        except ImportError as e:
+            diagnostics["steps"].append(f"✗ browser_use module not available: {e}")
+            diagnostics["errors"].append(f"browser_use import failed: {e}")
+            return diagnostics
+
+        # Step 2: Check browser session class
+        diagnostics["steps"].append("Checking BrowserSession class...")
+        try:
+            from sediman.browser.session import BrowserSession
+            diagnostics["steps"].append("✓ BrowserSession class available")
+        except ImportError as e:
+            diagnostics["steps"].append(f"✗ BrowserSession not available: {e}")
+            diagnostics["errors"].append(f"BrowserSession import failed: {e}")
+            return diagnostics
+
+        # Step 3: Check stealth mode availability
+        diagnostics["steps"].append("Checking stealth mode...")
+        try:
+            from sediman.browser.stealth import is_stealth_available
+            stealth_available = is_stealth_available()
+            diagnostics["steps"].append(f"✓ Stealth mode available: {stealth_available}")
+            diagnostics["stealth_available"] = stealth_available
+        except Exception as e:
+            diagnostics["steps"].append(f"✗ Stealth check failed: {e}")
+            diagnostics["errors"].append(f"Stealth check failed: {e}")
+
+        # Step 4: Attempt to start browser
+        diagnostics["steps"].append("Starting browser...")
+        start_time = time.time()
+        try:
+            browser = await _get_browser()
+            elapsed = time.time() - start_time
+            diagnostics["steps"].append(f"✓ Browser started in {elapsed:.2f}s")
+            diagnostics["browser_started"] = browser.is_started if browser else False
+            diagnostics["startup_time"] = elapsed
+
+            if browser and browser.is_started:
+                diagnostics["steps"].append("✓ Browser is ready")
+            else:
+                diagnostics["steps"].append("✗ Browser not ready after start")
+                diagnostics["errors"].append("Browser not ready after start")
+        except Exception as e:
+            elapsed = time.time() - start_time
+            error_trace = traceback.format_exc()
+            diagnostics["steps"].append(f"✗ Browser startup failed after {elapsed:.2f}s: {e}")
+            diagnostics["errors"].append(f"Browser startup failed: {e}")
+            diagnostics["error_trace"] = error_trace
+
+    except Exception as e:
+        error_trace = traceback.format_exc()
+        diagnostics["steps"].append(f"✗ Test failed: {e}")
+        diagnostics["errors"].append(f"Test failed: {e}")
+        diagnostics["error_trace"] = error_trace
+
+    diagnostics["end_time"] = time.time()
+    diagnostics["total_time"] = diagnostics["end_time"] - diagnostics["start_time"]
+
+    return diagnostics
+
+
+async def handle_sandbox_screenshot(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Get a screenshot from the browser sandbox."""
+    try:
+        browser = await _get_browser()
+        if not browser or not browser.is_started:
+            return {"screenshot": None, "error": "Browser not started"}
+
+        # Check if the browser-use browser has a CDP URL (meaning it's properly initialized)
+        # Try standard screenshot method first
+        try:
+            screenshot = await browser.take_screenshot()
+            if screenshot:
+                return {"screenshot": screenshot}
+        except Exception as std_screenshot_error:
+            logger.debug(f"Standard screenshot failed: {std_screenshot_error}")
+
+        # If standard method fails, try with a minimal agent
+        try:
+            from browser_use import Agent
+
+            # Create a simple agent that will initialize the browser properly
+            agent = Agent(
+                task="Go to about:blank",
+                llm=_get_llm(),
+                browser=browser_use_browser,
+                use_vision=False,
+            )
+
+            # Run one step to ensure page is created
+            await agent.step()
+
+            # Now try screenshot again
+            screenshot = await browser.take_screenshot()
+            await agent.close()
+
+            if screenshot:
+                return {"screenshot": screenshot}
+
+        except Exception as agent_error:
+            logger.debug(f"Agent screenshot failed: {agent_error}")
+
+        return {"screenshot": None, "error": "Could not capture screenshot - browser may be busy"}
+
+    except Exception as e:
+        logger.error(f"Failed to take screenshot: {e}")
+        return {"screenshot": None, "error": str(e)}
+
+
+async def handle_browser_goto(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Navigate browser to a URL without requiring AI agent."""
+    try:
+        url = params.get("url")
+        if not url:
+            return {"success": False, "error": "URL required"}
+
+        logger.info(f"[BROWSER_GOTO] Starting navigation to: {url}")
+
+        # Get browser
+        browser = await _get_browser()
+        if not browser or not browser.is_started:
+            logger.error(f"[BROWSER_GOTO] Browser not started")
+            return {"success": False, "error": "Browser not started"}
+
+        logger.info(f"[BROWSER_GOTO] Browser found, initializing CDP if needed...")
+
+        # Force CDP initialization by taking a screenshot first
+        try:
+            logger.info(f"[BROWSER_GOTO] Taking initial screenshot to force CDP init...")
+            screenshot = await browser.take_screenshot()
+            logger.info(f"[BROWSER_GOTO] Screenshot taken, CDP should be initialized now")
+        except Exception as screenshot_error:
+            logger.warning(f"[BROWSER_GOTO] Screenshot failed: {screenshot_error}")
+
+        # Now try to get CDP session
+        try:
+            session = await browser._browser.get_or_create_cdp_session()
+            logger.info(f"[BROWSER_GOTO] Got CDP session: {session}")
+
+            if not session.agent_current_page:
+                logger.info(f"[BROWSER_GOTO] No current page, creating new one...")
+                page = await session.new_page()
+            else:
+                page = session.agent_current_page
+                logger.info(f"[BROWSER_GOTO] Using existing page")
+
+            logger.info(f"[BROWSER_GOTO] Navigating to {url}...")
+            await page.goto(url, timeout=30000, wait_until="domcontentloaded")
+            await asyncio.sleep(2)  # Wait for page to load
+
+            logger.info(f"[BROWSER_GOTO] Successfully navigated to {url}")
+            return {"success": True, "url": url}
+
+        except Exception as cdp_error:
+            logger.error(f"[BROWSER_GOTO] CDP navigation failed: {cdp_error}")
+            # Try Playwright fallback
+            try:
+                context = await browser._get_playwright_for_screenshot()
+                if context:
+                    pages = context.pages
+                    if pages and len(pages) > 0:
+                        page = pages[0]
+                    else:
+                        page = await context.new_page()
+
+                    logger.info(f"[BROWSER_GOTO] Navigating via Playwright to {url}...")
+                    await page.goto(url, timeout=30000, wait_until="domcontentloaded")
+                    await asyncio.sleep(2)
+
+                    logger.info(f"[BROWSER_GOTO] Successfully navigated to {url} via Playwright")
+                    return {"success": True, "url": url}
+            except Exception as playwright_error:
+                logger.error(f"[BROWSER_GOTO] Playwright navigation also failed: {playwright_error}")
+                return {"success": False, "error": f"Both CDP and Playwright navigation failed"}
+
+        return {"success": False, "error": "Could not access browser for navigation"}
+
+    except Exception as e:
+        logger.error(f"[BROWSER_GOTO] Exception: {e}", exc_info=True)
+        return {"success": False, "error": str(e)}
+
+
+async def handle_browser_click(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Click on an element using CSS selector."""
+    try:
+        browser = await _get_browser()
+        if not browser or not browser.is_started:
+            return {"success": False, "error": "Browser not started"}
+
+        selector = params.get("selector")
+        if not selector:
+            return {"success": False, "error": "Selector required"}
+
+        logger.info(f"browser_click: {selector}")
+
+        # Get Playwright context
+        playwright_context = await browser._get_playwright_for_screenshot()
+        if playwright_context:
+            pages = playwright_context.pages
+            if pages and len(pages) > 0:
+                page = pages[0]
+                await page.click(selector, timeout=10000)
+                await asyncio.sleep(1)
+                return {"success": True, "selector": selector}
+
+        return {"success": False, "error": "No active page"}
+
+    except Exception as e:
+        logger.error(f"Failed to click element: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def handle_browser_fill(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Fill in a form field using CSS selector."""
+    try:
+        browser = await _get_browser()
+        if not browser or not browser.is_started:
+            return {"success": False, "error": "Browser not started"}
+
+        selector = params.get("selector")
+        text = params.get("text")
+        if not selector or text is None:
+            return {"success": False, "error": "Selector and text required"}
+
+        logger.info(f"browser_fill: {selector} = {text[:20]}...")
+
+        # Get Playwright context
+        playwright_context = await browser._get_playwright_for_screenshot()
+        if playwright_context:
+            pages = playwright_context.pages
+            if pages and len(pages) > 0:
+                page = pages[0]
+                await page.fill(selector, text, timeout=10000)
+                return {"success": True, "selector": selector}
+
+        return {"success": False, "error": "No active page"}
+
+    except Exception as e:
+        logger.error(f"Failed to fill element: {e}")
+        return {"success": False, "error": str(e)}
+
+
+async def handle_browser_wait(params: dict[str, Any], notify: NotifyFn | None = None) -> dict[str, Any]:
+    """Wait for a selector to appear."""
+    try:
+        browser = await _get_browser()
+        if not browser or not browser.is_started:
+            return {"success": False, "error": "Browser not started"}
+
+        selector = params.get("selector")
+        timeout = params.get("timeout", 5000)
+        if not selector:
+            return {"success": False, "error": "Selector required"}
+
+        logger.info(f"browser_wait: {selector}")
+
+        # Get Playwright context
+        playwright_context = await browser._get_playwright_for_screenshot()
+        if playwright_context:
+            pages = playwright_context.pages
+            if pages and len(pages) > 0:
+                page = pages[0]
+                await page.wait_for_selector(selector, timeout=timeout)
+                return {"success": True, "selector": selector}
+
+        return {"success": False, "error": "No active page"}
+
+    except Exception as e:
+        logger.error(f"Failed to wait for selector: {e}")
+        return {"success": False, "error": str(e)}
+
+
 # ── Dispatching ────────────────────────────────────────────────────
 
 NotifyFn = Callable[[str, dict[str, Any]], None]
@@ -1396,6 +1822,17 @@ HANDLERS: dict[str, Callable] = {
     "checkpoint.create": handle_checkpoint_create,
     "checkpoint.revert": handle_checkpoint_revert,
     "checkpoint.list": handle_checkpoint_list,
+    "sandbox.start": handle_sandbox_start,
+    "sandbox.stop": handle_sandbox_stop,
+    "sandbox.status": handle_sandbox_status,
+    "sandbox.set_mode": handle_sandbox_set_mode,
+    "sandbox.control": handle_sandbox_control,
+    "sandbox.test_browser": handle_sandbox_test_browser,
+    "sandbox.screenshot": handle_sandbox_screenshot,
+    "browser.goto": handle_browser_goto,
+    "browser.click": handle_browser_click,
+    "browser.fill": handle_browser_fill,
+    "browser.wait": handle_browser_wait,
 }
 
 

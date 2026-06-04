@@ -13,6 +13,7 @@ use sediman_tui_core::markdown;
 use unicode_width::UnicodeWidthChar;
 
 use crate::app::{App, ChatMessage, AgentTab, MessageState};
+use crate::constants::*;
 
 thread_local! {
     static LINE_CACHE: RefCell<(u64, u16, u16, Vec<MessageLine>)> = const { RefCell::new((0, 0, 0, Vec::new())) };
@@ -29,7 +30,7 @@ pub fn render_messages(buf: &mut CellBuffer, area: Rect, app: &mut App) {
         return;
     }
 
-    let max_width = area.width.saturating_sub(6) as usize;
+    let max_width = area.width.saturating_sub(MSG_BORDER_PADDING_SUBTRACT as u16) as usize;
 
     let need_rebuild = LINE_CACHE.with(|cache| {
         let cached = cache.borrow();
@@ -41,7 +42,7 @@ pub fn render_messages(buf: &mut CellBuffer, area: Rect, app: &mut App) {
     if need_rebuild {
         let mut new_lines: Vec<MessageLine> = Vec::new();
 
-        if app.agent_running {
+        if app.agent.running {
             render_streaming_sections(&mut new_lines, app, max_width, area);
         }
 
@@ -66,9 +67,9 @@ pub fn render_messages(buf: &mut CellBuffer, area: Rect, app: &mut App) {
     let max_scroll = total_lines.saturating_sub(visible_height);
 
     handle_scroll(app, max_scroll);
-    let scroll = max_scroll.min(app.scroll_offset);
-    if app.scroll_offset > max_scroll {
-        app.scroll_offset = max_scroll;
+    let scroll = max_scroll.min(app.scroll.offset);
+    if app.scroll.offset > max_scroll {
+        app.scroll.offset = max_scroll;
     }
 
     LINE_CACHE.with(|cache| {
@@ -78,7 +79,7 @@ pub fn render_messages(buf: &mut CellBuffer, area: Rect, app: &mut App) {
 
 fn render_streaming_sections(lines: &mut Vec<MessageLine>, app: &mut App, max_width: usize, _area: Rect) {
     let spinner = app.spinner_char();
-    let elapsed = app.agent_start.elapsed().as_secs();
+    let elapsed = app.agent.start.elapsed().as_secs();
     let elapsed_str = format_elapsed(elapsed);
 
     let (steps, thinking_text, response_text) = match app.messages.last() {
@@ -90,7 +91,7 @@ fn render_streaming_sections(lines: &mut Vec<MessageLine>, app: &mut App, max_wi
 
     let step_count = steps.len();
     let last_step = steps.last()
-        .map(|s| truncate_end(s, max_width.saturating_sub(18)))
+        .map(|s| truncate_end(s, max_width.saturating_sub(MSG_TRUNCATION_OFFSET)))
         .unwrap_or_else(|| "Starting...".into());
 
     lines.push(MessageLine::empty());
@@ -107,17 +108,17 @@ fn render_streaming_sections(lines: &mut Vec<MessageLine>, app: &mut App, max_wi
     let has_thinking = !thinking_text.is_empty();
     let has_response = !response_text.is_empty();
     let has_steps = !steps.is_empty();
-    let is_thinking_phase = app.streaming_phase == "thinking" || app.streaming_phase == "planning";
+    let is_thinking_phase = app.agent.streaming_phase == "thinking" || app.agent.streaming_phase == "planning";
 
     if has_thinking || has_steps {
         if has_thinking {
             // Always expand thinking section during thinking phase
-            let should_expand = app.thinking_expanded || is_thinking_phase;
+            let should_expand = app.scroll.thinking_expanded || is_thinking_phase;
             render_inline_section(
                 lines, app, max_width,
                 "\u{25c6}", "Thinking", thinking_text,
                 app.theme.warning, app.theme.text_muted,
-                should_expand, is_thinking_phase, 50,
+                should_expand, is_thinking_phase, THINKING_MAX_LINES,
             );
             if has_steps {
                 lines.push(MessageLine::empty());
@@ -126,7 +127,7 @@ fn render_streaming_sections(lines: &mut Vec<MessageLine>, app: &mut App, max_wi
 
         if has_steps {
             // Auto-expand steps during executing phase
-            let should_expand_steps = app.steps_expanded || app.streaming_phase == "executing";
+            let should_expand_steps = app.scroll.steps_expanded || app.agent.streaming_phase == "executing";
             render_inline_steps_expanded(lines, app, steps, max_width, should_expand_steps);
             if has_response {
                 lines.push(MessageLine::empty());
@@ -135,7 +136,7 @@ fn render_streaming_sections(lines: &mut Vec<MessageLine>, app: &mut App, max_wi
     }
 
     if has_response {
-        let is_response_phase = !is_thinking_phase && app.streaming_phase != "executing";
+        let is_response_phase = !is_thinking_phase && app.agent.streaming_phase != "executing";
         render_inline_section(
             lines, app, max_width,
             "\u{25b6}", "Response", response_text,
@@ -206,7 +207,7 @@ fn render_inline_section(
 
 #[allow(dead_code)]
 fn render_inline_steps(lines: &mut Vec<MessageLine>, app: &App, steps: &[String], max_width: usize) {
-    render_inline_steps_expanded(lines, app, steps, max_width, app.steps_expanded);
+    render_inline_steps_expanded(lines, app, steps, max_width, app.scroll.steps_expanded);
 }
 
 fn render_inline_steps_expanded(lines: &mut Vec<MessageLine>, app: &App, steps: &[String], max_width: usize, expanded: bool) {
@@ -219,7 +220,7 @@ fn render_inline_steps_expanded(lines: &mut Vec<MessageLine>, app: &App, steps: 
 
     if !expanded {
         if step_count > 0 {
-            let last = steps.last().map(|s| truncate_end(s, max_width.saturating_sub(4))).unwrap_or_default();
+            let last = steps.last().map(|s| truncate_end(s, max_width.saturating_sub(MSG_STEP_TRUNCATION_OFFSET))).unwrap_or_default();
             lines.push(MessageLine::text(
                 format!("    {}", last),
                 Style::new().fg(app.theme.text_muted),
@@ -301,8 +302,8 @@ fn render_completed_message(
                         AgentTab::Thinking if has_thinking => {
                             let content_lines: Vec<&str> = thinking_text.lines().collect();
                             let total = content_lines.len();
-                            let show_all = total <= 100;
-                            let limit = if show_all { total } else { 50 };
+                            let show_all = total <= CODE_COLLAPSE_THRESHOLD;
+                            let limit = if show_all { total } else { CODE_COLLAPSED_LINES };
 
                             for tline in content_lines.iter().take(limit) {
                                 if !tline.is_empty() {
@@ -321,7 +322,7 @@ fn render_completed_message(
                             }
                             if !show_all {
                                 lines.push(MessageLine::text(
-                                    format!("    \u{2026} {} more lines (collapsed)", total - 50),
+                                    format!("    \u{2026} {} more lines (collapsed)", total - CODE_COLLAPSED_LINES),
                                     Style::new().fg(app.theme.text_muted),
                                 ));
                             }
@@ -334,7 +335,7 @@ fn render_completed_message(
                                 Style::new().fg(color),
                             ));
 
-                            let max_show = 5;
+                            let max_show = INLINE_STEPS_MAX;
                             let show_steps: Vec<_> = if steps.len() > max_show {
                                 steps.iter().rev().take(max_show).collect::<Vec<_>>().into_iter().rev().collect()
                             } else {
@@ -421,15 +422,15 @@ fn render_completed_message(
 }
 
 fn handle_scroll(app: &mut App, max_scroll: u16) {
-    if app.scroll_paused {
+    if app.scroll.paused {
         return;
     }
 
-    if app.auto_scroll {
-        if max_scroll < 3 || app.scroll_offset < 3 {
-            app.scroll_offset = 0;
+    if app.scroll.auto_scroll {
+        if max_scroll < MSG_SCROLLBACK_THRESHOLD as u16 || app.scroll.offset < MSG_SCROLLBACK_THRESHOLD as u16 {
+            app.scroll.offset = 0;
         }
-        app.auto_scroll = false;
+        app.scroll.auto_scroll = false;
     }
 }
 
@@ -514,7 +515,7 @@ fn render_scroll_indicator(buf: &mut CellBuffer, area: Rect, app: &App, scroll: 
         }
     }
 
-    if app.scroll_paused && app.agent_running && scroll > 0 {
+    if app.scroll.paused && app.agent.running && scroll > 0 {
         let new_label = " \u{2193} New content ";
         let nx = area.right().saturating_sub(display_width(new_label) + 2);
         if nx > area.x {
@@ -544,7 +545,7 @@ impl MessageLine {
 }
 
 fn truncate_end(s: &str, max_len: usize) -> String {
-    if max_len < 4 {
+    if max_len < MSG_MIN_TRUNCATION_WIDTH {
         return s.chars().take(max_len).collect();
     }
     if display_width(s) <= max_len as u16 {
@@ -554,7 +555,7 @@ fn truncate_end(s: &str, max_len: usize) -> String {
     let mut width = 0usize;
     for ch in s.chars() {
         let cw = UnicodeWidthChar::width(ch).unwrap_or(0);
-        if width + cw > max_len - 3 {
+        if width + cw > max_len - ELLIPSIS_WIDTH {
             break;
         }
         result.push(ch);
@@ -565,7 +566,7 @@ fn truncate_end(s: &str, max_len: usize) -> String {
 }
 
 fn push_wrapped(lines: &mut Vec<MessageLine>, text: &str, style: Style, max_width: usize) {
-    if max_width < 4 {
+    if max_width < MSG_MIN_TRUNCATION_WIDTH {
         lines.push(MessageLine::text(text, style));
         return;
     }
@@ -577,7 +578,7 @@ fn push_wrapped(lines: &mut Vec<MessageLine>, text: &str, style: Style, max_widt
     }
 
     let chars: Vec<char> = text.chars().collect();
-    let inner_width = max_width.saturating_sub(4);
+    let inner_width = max_width.saturating_sub(MSG_INNER_WIDTH_SUBTRACT);
     let mut first = true;
     let mut pos = 0;
 
@@ -618,10 +619,10 @@ fn push_wrapped(lines: &mut Vec<MessageLine>, text: &str, style: Style, max_widt
 }
 
 pub fn format_elapsed(secs: u64) -> String {
-    if secs >= 3600 {
-        format!("{}h {:02}m", secs / 3600, (secs % 3600) / 60)
-    } else if secs >= 60 {
-        format!("{}m {:02}s", secs / 60, secs % 60)
+    if secs >= SECONDS_PER_HOUR {
+        format!("{}h {:02}m", secs / SECONDS_PER_HOUR, (secs % SECONDS_PER_HOUR) / SECONDS_PER_MINUTE)
+    } else if secs >= SECONDS_PER_MINUTE {
+        format!("{}m {:02}s", secs / SECONDS_PER_MINUTE, secs % SECONDS_PER_MINUTE)
     } else if secs == 0 {
         "< 1s".to_string()
     } else {
@@ -1131,7 +1132,7 @@ mod tests {
             app.append_step("Task: test".into());
             app.append_step("step 1".into());
             app.append_step("step 2".into());
-            app.steps_expanded = true;
+            app.scroll.steps_expanded = true;
             let steps = match app.messages.last().unwrap() {
                 ChatMessage::Agent { steps, .. } => steps.clone(),
                 _ => panic!("Expected Agent"),
@@ -1151,7 +1152,7 @@ mod tests {
             app.start_agent_message("test");
             app.append_step("Task: test".into());
             app.append_step("planning read code".into());
-            app.steps_expanded = false;
+            app.scroll.steps_expanded = false;
             let steps = match app.messages.last().unwrap() {
                 ChatMessage::Agent { steps, .. } => steps.clone(),
                 _ => panic!("Expected Agent"),
@@ -1359,13 +1360,13 @@ mod tests {
         #[test]
         fn test_render_streaming_sections_with_content() {
             let mut app = make_app();
-            app.agent_running = true;
-            app.agent_start = std::time::Instant::now();
+            app.agent.running = true;
+            app.agent.start = std::time::Instant::now();
             app.start_agent_message("test");
             app.append_streaming_token("thinking...", "thinking");
             app.append_streaming_token("responding...", "responding");
-            app.thinking_expanded = true;
-            app.steps_expanded = true;
+            app.scroll.thinking_expanded = true;
+            app.scroll.steps_expanded = true;
             app.append_step("planning".into());
 
             let mut lines = Vec::new();
@@ -1388,13 +1389,13 @@ mod tests {
         #[test]
         fn test_render_messages_during_streaming_no_duplicate_sections() {
             let mut app = make_app();
-            app.agent_running = true;
-            app.agent_start = std::time::Instant::now();
+            app.agent.running = true;
+            app.agent.start = std::time::Instant::now();
             app.start_agent_message("test");
             app.append_streaming_token("thinking...", "thinking");
             app.append_streaming_token("responding...", "responding");
-            app.thinking_expanded = true;
-            app.steps_expanded = true;
+            app.scroll.thinking_expanded = true;
+            app.scroll.steps_expanded = true;
             app.append_step("planning".into());
 
             let mut buf = CellBuffer::new(80, 40);
@@ -1448,41 +1449,41 @@ mod tests {
         #[test]
         fn test_auto_scroll_reset_when_near_bottom() {
             let mut app = make_app();
-            app.scroll_offset = 2;
-            app.auto_scroll = true;
+            app.scroll.offset = 2;
+            app.scroll.auto_scroll = true;
             handle_scroll(&mut app, 100);
-            assert_eq!(app.scroll_offset, 0);
-            assert!(!app.auto_scroll);
+            assert_eq!(app.scroll.offset, 0);
+            assert!(!app.scroll.auto_scroll);
         }
     
         #[test]
         fn test_auto_scroll_does_not_snap_when_far_from_bottom() {
             let mut app = make_app();
-            app.scroll_offset = 50;
-            app.auto_scroll = true;
+            app.scroll.offset = 50;
+            app.scroll.auto_scroll = true;
             handle_scroll(&mut app, 200);
-            assert_eq!(app.scroll_offset, 50);
-            assert!(!app.auto_scroll);
+            assert_eq!(app.scroll.offset, 50);
+            assert!(!app.scroll.auto_scroll);
         }
     
         #[test]
         fn test_scroll_paused_prevents_auto_scroll() {
             let mut app = make_app();
-            app.scroll_offset = 2;
-            app.auto_scroll = true;
-            app.scroll_paused = true;
+            app.scroll.offset = 2;
+            app.scroll.auto_scroll = true;
+            app.scroll.paused = true;
             handle_scroll(&mut app, 100);
-            assert_eq!(app.scroll_offset, 2);
+            assert_eq!(app.scroll.offset, 2);
         }
     
         #[test]
         fn test_auto_scroll_reset_on_small_buffer() {
             let mut app = make_app();
-            app.scroll_offset = 0;
-            app.auto_scroll = true;
+            app.scroll.offset = 0;
+            app.scroll.auto_scroll = true;
             handle_scroll(&mut app, 2);
-            assert_eq!(app.scroll_offset, 0);
-            assert!(!app.auto_scroll);
+            assert_eq!(app.scroll.offset, 0);
+            assert!(!app.scroll.auto_scroll);
         }
     
         #[test]

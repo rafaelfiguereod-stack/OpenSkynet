@@ -52,7 +52,7 @@ pub async fn handle_checkpoint(app: &mut App, _args: &str) {
         lines.push(ModalLine::normal(format!("  {}  {}", cp_id, target_dir)));
     }
 
-    app.active_modal = Some(AppModal::Info {
+    app.modals.active = Some(AppModal::Info {
         title: "Checkpoints".into(),
         lines,
         scroll: 0,
@@ -73,7 +73,7 @@ pub async fn handle_checkpoint_create(app: &mut App, args: &str) {
         return;
     }
 
-    match app.bridge.call::<serde_json::Value>("checkpoint.create", serde_json::json!({"target_dir": target})).await {
+    match app.connection.bridge.call::<serde_json::Value>("checkpoint.create", serde_json::json!({"target_dir": target})).await {
         Ok(result) => {
             let id = result.get("id").and_then(|v| v.as_str()).unwrap_or("?");
             app.add_system_message(format!("Created checkpoint {}", id));
@@ -98,7 +98,7 @@ pub async fn handle_checkpoint_revert(app: &mut App, args: &str) {
     let target = parts[0];
     let cp_id = parts[1];
 
-    match app.bridge.call::<serde_json::Value>("checkpoint.revert", serde_json::json!({"checkpoint_id": cp_id, "target_dir": target})).await {
+    match app.connection.bridge.call::<serde_json::Value>("checkpoint.revert", serde_json::json!({"checkpoint_id": cp_id, "target_dir": target})).await {
         Ok(_) => app.add_system_message(format!("Reverted to checkpoint {}", cp_id)),
         Err(e) => app.add_error_message(format!("Failed to revert: {}", e)),
     }
@@ -116,7 +116,7 @@ pub async fn handle_rewind(app: &mut App, args: &str) {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| ".".into());
 
-    match app.bridge.call::<serde_json::Value>("checkpoint.revert", serde_json::json!({"checkpoint_id": cp_id, "target_dir": cwd})).await {
+    match app.connection.bridge.call::<serde_json::Value>("checkpoint.revert", serde_json::json!({"checkpoint_id": cp_id, "target_dir": cwd})).await {
         Ok(_) => app.add_system_message(format!("Reverted to checkpoint {}", cp_id)),
         Err(e) => app.add_error_message(format!("Failed to rewind: {}", e)),
     }
@@ -145,7 +145,7 @@ pub async fn handle_branch(app: &mut App, args: &str) {
         return;
     }
 
-    match app.bridge.call::<serde_json::Value>("checkpoint.create", serde_json::json!({"target_dir": target, "name": name})).await {
+    match app.connection.bridge.call::<serde_json::Value>("checkpoint.create", serde_json::json!({"target_dir": target, "name": name})).await {
         Ok(result) => {
             let id = result.get("id").and_then(|v| v.as_str()).unwrap_or("?");
             app.add_system_message(format!("Branch saved: {} ({})", name, id));

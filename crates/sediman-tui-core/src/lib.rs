@@ -1,3 +1,4 @@
+pub mod component;
 pub mod input;
 pub mod layout;
 pub mod styling;
