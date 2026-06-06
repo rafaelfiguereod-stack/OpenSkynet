@@ -3,16 +3,12 @@ import { join } from "node:path";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 
 export type PermissionMode = "ask" | "allow" | "deny";
-export type CoderBackend = "local" | "sandbox";
-export type SearchMode = "memory" | "live" | "hybrid";
 
 export interface TUIConfigData {
   theme: string;
   permissionMode: PermissionMode;
   showSidePanel: boolean;
   headless: boolean;
-  coderBackend: CoderBackend;
-  searchMode: SearchMode;
   updateFrequency: number;
   provider: string;
   model: string;
@@ -27,8 +23,6 @@ const DEFAULTS: TUIConfigData = {
   permissionMode: "ask",
   showSidePanel: false,
   headless: false,
-  coderBackend: "local",
-  searchMode: "memory",
   updateFrequency: 30,
   provider: "openai",
   model: "",
@@ -80,8 +74,6 @@ export class TUIConfig {
   permissionMode: PermissionMode;
   showSidePanel: boolean;
   headless: boolean;
-  coderBackend: CoderBackend;
-  searchMode: SearchMode;
   updateFrequency: number;
   provider: string;
   model: string;
@@ -94,8 +86,6 @@ export class TUIConfig {
     this.permissionMode = merged.permissionMode;
     this.showSidePanel = merged.showSidePanel;
     this.headless = merged.headless;
-    this.coderBackend = merged.coderBackend;
-    this.searchMode = merged.searchMode;
     this.updateFrequency = merged.updateFrequency;
     this.provider = merged.provider;
     this.model = merged.model;
@@ -126,8 +116,6 @@ export class TUIConfig {
         permissionMode: this.permissionMode,
         showSidePanel: this.showSidePanel,
         headless: this.headless,
-        coderBackend: this.coderBackend,
-        searchMode: this.searchMode,
         updateFrequency: this.updateFrequency,
         provider: this.provider,
         model: this.model,

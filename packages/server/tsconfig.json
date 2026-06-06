@@ -13,10 +13,10 @@
     "sourceMap": true,
     "outDir": "dist",
     "types": ["bun"],
-    "lib": ["ESNext"],
+    "lib": ["ESNext", "DOM"],
     "jsx": "preserve",
     "jsxImportSource": "@opentui/solid"
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": ["node_modules", "dist", "vendor", "../../vendor"]
 }

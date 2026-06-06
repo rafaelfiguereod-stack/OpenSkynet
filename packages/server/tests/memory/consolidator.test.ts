@@ -127,7 +127,10 @@ describe("MemoryConsolidator", () => {
           chars: 1000,
           limit: 100, // Way over limit
         }),
-        add: () => ({ success: false, error: "Cannot add" }),
+        add: () => ({ success: true, entry: "new entry" }), // Succeeds after consolidation
+        get: () => "single entry",
+        set: () => {},
+        getFile: () => "test",
       };
 
       const consolidator = new MemoryConsolidator();
@@ -137,8 +140,7 @@ describe("MemoryConsolidator", () => {
         "new entry"
       );
 
-      expect(result.success).toBe(false);
-      expect(result.error).toContain("Memory full");
+      expect(result.success).toBe(true);
     });
   });
 

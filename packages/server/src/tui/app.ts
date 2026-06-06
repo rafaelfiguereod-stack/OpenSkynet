@@ -1,7 +1,7 @@
 import type { ThemeTokens } from "./theme.js";
 import { getTheme } from "./theme.js";
 
-export type AgentMode = "Manager" | "Browser" | "Coder" | "Terminator";
+export type AgentMode = "T-800" | "Terminator";
 
 export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
@@ -14,10 +14,20 @@ export interface AgentModeEntry {
 }
 
 export const DEFAULT_MODES: AgentModeEntry[] = [
-  { mode: "manager", label: "Mgr", runner: "default", description: "General-purpose agent", capabilities: [] },
-  { mode: "browser", label: "Brow", runner: "browser", description: "Web browsing agent", capabilities: ["browser"] },
-  { mode: "coder", label: "Code", runner: "coding", description: "Coding agent", capabilities: ["fileops", "terminal"] },
-  { mode: "terminator", label: "Term", runner: "orchestrator", description: "Autonomous multi-task agent", capabilities: ["fileops", "terminal", "browser"] },
+  {
+    mode: "t800",
+    label: "T-800",
+    runner: "t800",
+    description: "Direct execution agent with all tools",
+    capabilities: ["fileops", "terminal", "browser", "web", "skills", "coding", "documents"]
+  },
+  {
+    mode: "terminator",
+    label: "Term",
+    runner: "terminator",
+    description: "Autonomous multi-task orchestrator",
+    capabilities: ["fileops", "terminal", "browser", "web", "skills", "coding", "documents", "orchestration"]
+  },
 ];
 
 export const COMMANDS: Array<{ name: string; aliases?: string[]; description: string; category: string }> = [
@@ -26,10 +36,9 @@ export const COMMANDS: Array<{ name: string; aliases?: string[]; description: st
   { name: "/clear", aliases: ["/cls"], description: "Clear messages", category: "General" },
   { name: "/reset", description: "Full reset", category: "General" },
   { name: "/status", description: "Show status", category: "General" },
+  { name: "/mode", aliases: ["/m"], description: "Switch agent mode (T-800/Terminator)", category: "Agent" },
   { name: "/models", aliases: ["/model"], description: "Switch model", category: "Agent" },
   { name: "/provider", aliases: ["/providers"], description: "Switch provider", category: "Agent" },
-  { name: "/coder", description: "Switch coder backend", category: "Agent" },
-  { name: "/search", description: "Search mode", category: "Agent" },
   { name: "/soul", description: "Edit personality", category: "Agent" },
   { name: "/skills", aliases: ["/skill"], description: "Browse skills", category: "Skills" },
   { name: "/memory", aliases: ["/mem"], description: "Manage memory", category: "Memory" },
@@ -43,11 +52,6 @@ export const COMMANDS: Array<{ name: string; aliases?: string[]; description: st
   { name: "/checkpoint-create", description: "Create checkpoint", category: "Checkpoint" },
   { name: "/checkpoint-revert", aliases: ["/rewind"], description: "Revert to checkpoint", category: "Checkpoint" },
   { name: "/branch", description: "Named checkpoint", category: "Checkpoint" },
-  { name: "/delegate", description: "Run sub-agent task", category: "Tasks" },
-  { name: "/parallel", description: "Run parallel tasks", category: "Tasks" },
-  { name: "/doctor", description: "Run diagnostics", category: "Utilities" },
-  { name: "/update", aliases: ["/upgrade"], description: "Check for updates", category: "Utilities" },
-  { name: "/compress", description: "Compress old messages", category: "Utilities" },
   { name: "/themes", aliases: ["/theme"], description: "Switch theme", category: "Appearance" },
 ];
 
@@ -89,13 +93,10 @@ export type ModalType =
   | "skillBrowser"
   | "memoryMenu"
   | "memoryEditor"
-  | "memorySystemPicker"
   | "scheduleBrowser"
   | "sessionBrowser"
   | "themePicker"
-  | "coderPicker"
-  | "searchModePicker"
-  | "browserModePicker"
+  | "modePicker"
   | "doctor"
   | "info"
   | "soulEditor"
@@ -116,6 +117,14 @@ export interface ChatMessage {
   selectedTab?: "thinking" | "steps" | "response";
   tabExpanded?: boolean;
   state?: "streaming" | "completed";
+  thinkingExpanded?: boolean;
+  stepsExpanded?: boolean;
+  retryAttempt?: number | null;
+  retryMax?: number | null;
+  retryCountdown?: number | null;
+  validationConfidence?: number | null;
+  validationIssues?: number | null;
+  reflectionStatus?: boolean;
 }
 
 export interface ScrollState {
@@ -152,14 +161,12 @@ export class App {
   agent = {
     running: false,
     startTime: 0,
-    mode: "Manager" as AgentMode,
+    mode: "T-800" as AgentMode,
     modes: [...DEFAULT_MODES],
     currentModeIndex: 0,
     spinnerFrame: 0,
     streamingPhase: "",
     taskCount: 0,
-    coderBackend: "internal",
-    searchMode: "auto",
     retryAttempt: null as number | null,
     retryMax: null as number | null,
     retryCountdown: null as number | null,
@@ -277,7 +284,7 @@ export class App {
   cycleAgentMode(): void {
     this.agent.currentModeIndex = (this.agent.currentModeIndex + 1) % this.agent.modes.length;
     const entry = this.agent.modes[this.agent.currentModeIndex];
-    this.agent.mode = (entry.mode === "browser" ? "Browser" : entry.mode === "coder" ? "Coder" : entry.mode === "terminator" ? "Terminator" : "Manager") as AgentMode;
+    this.agent.mode = (entry.mode === "t800" ? "T-800" : entry.mode === "terminator" ? "Terminator" : "T-800") as AgentMode;
   }
 
   currentModeLabel(): string {

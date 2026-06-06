@@ -4,7 +4,7 @@ import type { BrowserController } from "../browser/controller";
 import type { BaseMemoryStrategy } from "../memory/strategy";
 import type { SkillEngine } from "../skills/engine";
 import type { AgentLoop } from "../agent/loop";
-import type { CheckpointManager } from "../agent/checkpoint";
+import type { CheckpointManager } from "../agent/memory/checkpoint";
 import type { CronManager } from "../scheduler/cron";
 import type { HubClient, GitHubInstaller } from "../skills/hub";
 import type { SkillSearchEngine } from "../skills/search";

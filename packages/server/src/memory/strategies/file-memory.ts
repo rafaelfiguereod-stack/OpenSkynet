@@ -42,7 +42,8 @@ export class FileMemoryStrategy extends BaseMemoryStrategy {
   }
 
   private memDir: string;
-  private initialized = false;
+  private _initialized = false;
+  private _initPromise: Promise<void> | null = null;
 
   constructor() {
     super();
@@ -57,14 +58,31 @@ export class FileMemoryStrategy extends BaseMemoryStrategy {
   }
 
   async initialize(): Promise<void> {
-    if (this.initialized) return;
+    if (this._initialized) return;
+    if (this._initPromise) return this._initPromise;
+    this._initPromise = this._doInit();
+    await this._initPromise;
+  }
+
+  private async _doInit(): Promise<void> {
     mkdirSync(this.memDir, { recursive: true });
     for (const name of Object.values(FILES)) {
       const fp = join(this.memDir, name);
       if (!existsSync(fp)) writeFileSync(fp, "");
     }
-    this.initialized = true;
+    this._initialized = true;
     logger.info({ memDir: this.memDir }, "file memory initialized");
+  }
+
+  private _ensureInit(): void {
+    if (!this._initialized) {
+      mkdirSync(this.memDir, { recursive: true });
+      for (const name of Object.values(FILES)) {
+        const fp = join(this.memDir, name);
+        if (!existsSync(fp)) writeFileSync(fp, "");
+      }
+      this._initialized = true;
+    }
   }
 
   write(
@@ -72,6 +90,7 @@ export class FileMemoryStrategy extends BaseMemoryStrategy {
     content: string,
     _metadata?: Record<string, unknown>,
   ): boolean {
+    this._ensureInit();
     try {
       const fp = this.filePath(target);
       const line = `- ${content.trim()}\n`;
@@ -90,6 +109,7 @@ export class FileMemoryStrategy extends BaseMemoryStrategy {
   }
 
   search(query: string, limit = 10): MemoryEntry[] {
+    this._ensureInit();
     const queryTokens = tokenize(query);
     const results: MemoryEntry[] = [];
 
@@ -123,6 +143,7 @@ export class FileMemoryStrategy extends BaseMemoryStrategy {
     oldContent: string,
     newContent: string,
   ): boolean {
+    this._ensureInit();
     try {
       const fp = this.filePath(target);
       if (!existsSync(fp)) return false;
@@ -142,6 +163,7 @@ export class FileMemoryStrategy extends BaseMemoryStrategy {
   }
 
   remove(target: string, content: string): boolean {
+    this._ensureInit();
     try {
       const fp = this.filePath(target);
       if (!existsSync(fp)) return false;
@@ -163,6 +185,7 @@ export class FileMemoryStrategy extends BaseMemoryStrategy {
   }
 
   context(task: string, maxChars = 4000): string {
+    this._ensureInit();
     const taskTokens = new Set(tokenize(task));
     const allEntries: Array<{ content: string; target: string; score: number }> = [];
 

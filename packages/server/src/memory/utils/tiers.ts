@@ -104,8 +104,8 @@ export class TieredMemoryEntry implements TieredEntry {
 }
 
 export interface WorkingMemoryConfig {
-  maxEntries: number;
-  maxChars: number;
+  maxEntries?: number;
+  maxChars?: number;
 }
 
 export class WorkingMemory {
@@ -221,8 +221,8 @@ export class WorkingMemory {
 }
 
 export interface SessionMemoryConfig {
-  maxEntries: number;
-  maxChars: number;
+  maxEntries?: number;
+  maxChars?: number;
 }
 
 export class SessionMemory {
@@ -320,8 +320,8 @@ export class SessionMemory {
 }
 
 export interface LongTermMemoryConfig {
-  maxEntries: number;
-  maxChars: number;
+  maxEntries?: number;
+  maxChars?: number;
 }
 
 export class LongTermMemory {

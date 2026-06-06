@@ -1,3 +1,11 @@
+export interface Attachment {
+  id: string;
+  name: string;
+  size: number;
+  type: string;
+  status?: 'uploading' | 'done' | 'error';
+}
+
 export interface Message {
   id: string;
   role: 'user' | 'assistant' | 'system';
@@ -5,6 +13,7 @@ export interface Message {
   timestamp: Date;
   status?: MessageStatus;
   metadata?: MessageMetadata;
+  attachments?: Attachment[];
 }
 
 export type MessageStatus = 'idle' | 'sending' | 'streaming' | 'done' | 'error';

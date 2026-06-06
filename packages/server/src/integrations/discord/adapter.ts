@@ -1,6 +1,6 @@
 import { BaseAdapter, type SendResult } from "../../gateway/base";
 import { DiscordBot } from "./bot";
-import type { Channel, Message } from "discord.js";
+import type { Channel, Message, APIEmbed } from "discord.js";
 import type { ThreadResult, ReactionResult } from "./tools";
 
 export interface DiscordChannel {
@@ -73,7 +73,7 @@ export class DiscordAdapter extends BaseAdapter {
           channels.push({
             id: channel.id,
             name: (channel as any).name ?? "unknown",
-            type: channel.type,
+            type: String(channel.type),
             guildId: guild.id,
             guildName: guild.name,
           });
@@ -87,7 +87,7 @@ export class DiscordAdapter extends BaseAdapter {
             channels.push({
               id: channel.id,
               name: (channel as any).name ?? "unknown",
-              type: channel.type,
+              type: String(channel.type),
               guildId: guild.id,
               guildName: guild.name,
             });
@@ -118,9 +118,9 @@ export class DiscordAdapter extends BaseAdapter {
         return { success: false, error: "Channel not found or not sendable" };
       }
 
-      const options: { content: string; embeds?: unknown[] } = { content };
+      const options: { content: string; embeds?: APIEmbed[] } = { content };
       if (embed) {
-        options.embeds = [embed];
+        options.embeds = [embed as APIEmbed];
       }
 
       const message = await channel.send(options);

@@ -100,6 +100,16 @@ export class DiscordTools {
 
       const channelId = args.channelId as string;
       const content = args.content as string;
+
+      // Validate required fields
+      if (!channelId || !content) {
+        return {
+          success: false,
+          output: "",
+          error: "Missing required fields: channelId and content",
+        };
+      }
+
       const embed = args.embed as Record<string, unknown> | undefined;
 
       try {

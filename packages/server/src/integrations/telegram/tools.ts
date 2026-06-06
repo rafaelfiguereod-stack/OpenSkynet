@@ -100,6 +100,16 @@ export class TelegramTools {
 
       const chatId = args.chatId as string;
       const content = args.content as string;
+
+      // Validate required fields
+      if (!chatId || !content) {
+        return {
+          success: false,
+          output: "",
+          error: "Missing required fields: chatId and content",
+        };
+      }
+
       const parseMode = args.parseMode as "Markdown" | "HTML" | "None" | undefined;
       const disableNotification = args.disableNotification as boolean | undefined;
 

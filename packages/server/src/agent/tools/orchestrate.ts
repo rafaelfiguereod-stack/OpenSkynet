@@ -53,6 +53,7 @@ class SandboxSearchAPI {
     const excludeSet = new Set(exclude);
     return results.filter((r) => {
       try {
+        if (!r.url) return true; // Filter out results without URLs
         const url = new URL(r.url);
         return !excludeSet.has(url.hostname);
       } catch {

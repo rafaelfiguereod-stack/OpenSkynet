@@ -38,7 +38,7 @@ describe("BrowserTools", () => {
     });
   });
 
-  describe("page operations", => {
+  describe("page operations", () => {
     test("gets page title", () => {
       const title = "Page Title";
       expect(title).toBeDefined();

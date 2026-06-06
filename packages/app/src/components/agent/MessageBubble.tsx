@@ -1,4 +1,4 @@
-import { Copy, Check } from 'lucide-react';
+import { Copy, Check, FileText, FileImage, FileType, File } from 'lucide-react';
 import { Message } from '@/types';
 import { cn } from '@/lib/utils';
 import { formatRelativeTime } from '@/lib/utils';
@@ -22,6 +22,23 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const attachments = message.attachments;
+
+  const getFileIcon = (type: string, className = 'w-4 h-4') => {
+    if (type.includes('pdf')) return <FileText className={className} />;
+    if (type.includes('image')) return <FileImage className={className} />;
+    if (type.includes('powerpoint') || type.includes('presentation') || type.includes('ppt')) {
+      return <FileType className={className} />;
+    }
+    return <File className={className} />;
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
   return (
     <div className={cn(
       'flex gap-2 group',
@@ -31,6 +48,30 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
         'flex flex-col gap-0.5 max-w-[85%]',
         isUser && 'items-end'
       )}>
+        {/* Attachments */}
+        {attachments && attachments.length > 0 && (
+          <div className={cn(
+            'flex flex-wrap gap-2 p-2 rounded-lg border',
+            isUser
+              ? 'border-primary/20 bg-primary/10'
+              : 'border-border bg-muted/50'
+          )}>
+            {attachments.map((attachment) => (
+              <div
+                key={attachment.id}
+                className="flex items-center gap-2 px-2 py-1 bg-background border border-input rounded-md text-xs"
+              >
+                {getFileIcon(attachment.type, 'w-4 h-4 text-muted-foreground')}
+                <span className="max-w-[120px] truncate">{attachment.name}</span>
+                <span className="text-muted-foreground">
+                  ({formatFileSize(attachment.size)})
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Message Content */}
         <div
           className={cn(
             'relative border px-2 py-1 rounded-sm',
@@ -51,7 +92,7 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
                 ol: ({ children }) => <ol className="my-0 space-y-0">{children}</ol>,
               }}
             >
-              {message.content || (isStreaming ? '\u258A' : '')}
+              {message.content || (isStreaming ? '▊' : '')}
             </ReactMarkdown>
           </div>
 

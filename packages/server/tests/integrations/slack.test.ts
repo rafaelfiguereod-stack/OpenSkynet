@@ -170,42 +170,41 @@ describe("SlackTools", () => {
     });
 
     test("registers list_channels tool", () => {
-      let registeredDef: any = null;
+      const registered: any[] = [];
 
-      mockBus.register = (def: any) => {
-        registeredDef = def;
+      mockBus.register = (def: any, handler: any) => {
+        registered.push({ def, handler });
       };
 
       tools.register(mockBus);
 
-      expect(registeredDef.name).toBe("slack_list_channels");
+      const listChannelsTool = registered.find(r => r.def.name === "slack_list_channels");
+      expect(listChannelsTool).toBeDefined();
+      expect(listChannelsTool?.def.name).toBe("slack_list_channels");
     });
   });
 
   describe("list_channels", () => {
-    test("lists all channels", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let listChannelsHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      listChannelsHandler = handlers.get("slack_list_channels");
+    });
 
-      const result = await handler("slack_list_channels", {});
+    test("lists all channels", async () => {
+      const result = await listChannelsHandler("slack_list_channels", {});
 
       expect(result.success).toBe(true);
       expect(result.output).toContain("general");
     });
 
     test("excludes archived when requested", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
-      };
-
-      tools.register(mockBus);
-
-      const result = await handler("slack_list_channels", {
+      const result = await listChannelsHandler("slack_list_channels", {
         excludeArchived: true,
       });
 
@@ -214,15 +213,19 @@ describe("SlackTools", () => {
   });
 
   describe("send_message", () => {
-    test("sends message to channel", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let sendMessageHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      sendMessageHandler = handlers.get("slack_send_message");
+    });
 
-      const result = await handler("slack_send_message", {
+    test("sends message to channel", async () => {
+      const result = await sendMessageHandler("slack_send_message", {
         channelId: "C123",
         content: "Hello world",
       });
@@ -231,14 +234,7 @@ describe("SlackTools", () => {
     });
 
     test("requires channelId and content", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
-      };
-
-      tools.register(mockBus);
-
-      const result = await handler("slack_send_message", {
+      const result = await sendMessageHandler("slack_send_message", {
         channelId: "C123",
       });
 
@@ -246,14 +242,7 @@ describe("SlackTools", () => {
     });
 
     test("supports blocks", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
-      };
-
-      tools.register(mockBus);
-
-      const result = await handler("slack_send_message", {
+      const result = await sendMessageHandler("slack_send_message", {
         channelId: "C123",
         content: "fallback",
         blocks: [{ type: "section", text: { type: "plain_text", text: "Block text" } }],
@@ -263,14 +252,7 @@ describe("SlackTools", () => {
     });
 
     test("supports thread reply", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
-      };
-
-      tools.register(mockBus);
-
-      const result = await handler("slack_send_message", {
+      const result = await sendMessageHandler("slack_send_message", {
         channelId: "C123",
         content: "Thread reply",
         threadTs: "1234567890.123456",
@@ -281,15 +263,19 @@ describe("SlackTools", () => {
   });
 
   describe("get_messages", () => {
-    test("retrieves channel messages", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let getMessagesHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      getMessagesHandler = handlers.get("slack_get_messages");
+    });
 
-      const result = await handler("slack_get_messages", {
+    test("retrieves channel messages", async () => {
+      const result = await getMessagesHandler("slack_get_messages", {
         channelId: "C123",
         limit: 50,
       });
@@ -299,15 +285,19 @@ describe("SlackTools", () => {
   });
 
   describe("get_channel_info", () => {
-    test("retrieves channel information", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let getChannelInfoHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      getChannelInfoHandler = handlers.get("slack_get_channel_info");
+    });
 
-      const result = await handler("slack_get_channel_info", {
+    test("retrieves channel information", async () => {
+      const result = await getChannelInfoHandler("slack_get_channel_info", {
         channelId: "C123",
       });
 

@@ -10,8 +10,27 @@ export type Message = Record<string, any>;
 
 export { type ProviderPreset } from "./provider-loader";
 
-export const PROVIDERS: Record<string, ProviderPreset> = loadProviders();
-export const PROVIDER_CATEGORIES: Record<string, string> = loadProviderCategories();
+let _providers: Record<string, ProviderPreset> | null = null;
+let _categories: Record<string, string> | null = null;
+
+export function getProviders(): Record<string, ProviderPreset> {
+  if (!_providers) _providers = loadProviders();
+  return _providers;
+}
+export function getProviderCategories(): Record<string, string> {
+  if (!_categories) _categories = loadProviderCategories();
+  return _categories;
+}
+
+export const PROVIDERS: Record<string, ProviderPreset> = new Proxy({} as Record<string, ProviderPreset>, {
+  get(_, key) { return getProviders()[key as string]; },
+  has(_, key) { return key in getProviders(); },
+  ownKeys() { return Object.keys(getProviders()); },
+  getOwnPropertyDescriptor(_, key) { return { enumerable: true, configurable: true, value: getProviders()[key as string] }; },
+});
+export const PROVIDER_CATEGORIES: Record<string, string> = new Proxy({} as Record<string, string>, {
+  get(_, key) { return getProviderCategories()[key as string]; },
+});
 
 
 const MAX_RETRIES = 3;

@@ -20,7 +20,7 @@ function truncateIfNeeded(): void {
   }
 }
 
-export function setupLogging(logLevel = "info"): void {
+export function setupLogging(logLevel = "info", consoleEnabled = true): void {
   if (_configured) return;
 
   mkdirSync(LOG_DIR, { recursive: true });
@@ -30,7 +30,8 @@ export function setupLogging(logLevel = "info"): void {
     { target: "pino/file", options: { destination: LOG_FILE }, level: logLevel },
   ];
 
-  if (process.env.NODE_ENV !== "production") {
+  // Only add console output if explicitly enabled (not in TUI mode)
+  if (consoleEnabled && process.env.NODE_ENV !== "production") {
     targets.push({
       target: "pino-pretty",
       options: { colorize: true },

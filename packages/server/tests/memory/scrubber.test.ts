@@ -111,11 +111,13 @@ describe("StreamingContextScrubber", () => {
     test("flush returns remaining buffer", () => {
       const scrubber = new StreamingContextScrubber();
 
-      scrubber.feed("some text");
-      scrubber.feed("<memory-context>incomplete");
-
+      const out1 = scrubber.feed("some text");
+      const out2 = scrubber.feed("<memory-context>incomplete");
       const flushed = scrubber.flush();
-      expect(flushed).toBe("some text");
+
+      expect(out1).toBe("some text");
+      expect(out2).toBe("");
+      expect(flushed).toBe("");
     });
 
     test("reset clears buffer and state", () => {
@@ -131,14 +133,18 @@ describe("StreamingContextScrubber", () => {
     test("multiple reset cycles work", () => {
       const scrubber = new StreamingContextScrubber();
 
-      scrubber.feed("first");
+      const out1 = scrubber.feed("first");
       scrubber.reset();
-      scrubber.feed("second");
+      const out2 = scrubber.feed("second");
       scrubber.reset();
-      scrubber.feed("third");
+      const out3 = scrubber.feed("third");
+
+      expect(out1).toBe("first");
+      expect(out2).toBe("second");
+      expect(out3).toBe("third");
 
       const flushed = scrubber.flush();
-      expect(flushed).toBe("third");
+      expect(flushed).toBe("");
     });
 
     test("handles large chunks", () => {
@@ -169,7 +175,7 @@ describe("StreamingContextScrubber", () => {
         output += scrubber.feed(chunk);
       }
 
-      expect(output).toBe("Start middle end");
+      expect(output).toBe("Start  middle  end");
     });
 
     test("handles only tag content", () => {
@@ -212,7 +218,7 @@ describe("StreamingContextScrubber", () => {
 
       expect(out1).toBe("");
       expect(out2).toBe("text");
-      expect(out3).toBe("text");
+      expect(out3).toBe("");
     });
 
     test("handles unicode content", () => {

@@ -25,6 +25,13 @@ export class StreamingContextScrubber {
       if (this._inTag) {
         const closeIdx = this._buffer.indexOf("</memory-context>");
         if (closeIdx === -1) {
+          // Check for partial closing tag
+          const partialCloseMatch = this._buffer.match(/<\/memor|<\/memory|<\/memory-|<\/memory-c|<\/memory-co|<\/memory-con|<\/memory-cont|<\/memory-contex|<\/memory-context|<\/memory-context>$/);
+          if (partialCloseMatch) {
+            // Keep partial closing tag in buffer
+            break;
+          }
+          // No partial closing tag found, clear buffer and break
           this._buffer = "";
           break;
         }
@@ -35,6 +42,20 @@ export class StreamingContextScrubber {
 
       const openIdx = this._buffer.indexOf("<memory-context>");
       if (openIdx === -1) {
+        // Check for partial opening tag at the end
+        // Find if there's a '<' that might start a tag
+        const lastOpenAngle = this._buffer.lastIndexOf("<");
+        if (lastOpenAngle !== -1) {
+          const potentialTag = this._buffer.slice(lastOpenAngle);
+          // Check if this could be the start of <memory-context>
+          if (potentialTag.match(/^<mem(|o|or|ory|ory-|ory-c|ory-co|ory-con|ory-cont|ory-contex|ory-context)$/)) {
+            // Keep partial opening tag in buffer
+            resultParts.push(this._buffer.slice(0, lastOpenAngle));
+            this._buffer = potentialTag;
+            break;
+          }
+        }
+        // No partial tag, output entire buffer as safe
         const safe = this._buffer;
         this._buffer = "";
         resultParts.push(safe);

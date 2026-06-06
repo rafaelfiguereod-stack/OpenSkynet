@@ -7,4 +7,5 @@ export interface MessageEvent {
   platform: string;
   isCommand?: boolean;
   timestamp: string;
+  attachments?: Array<{ url: string; name: string; type: string }>;
 }

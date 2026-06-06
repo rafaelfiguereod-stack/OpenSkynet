@@ -1,9 +1,19 @@
 /**
  * Telegram bot listener - handles incoming messages via long polling.
  * Forwards messages to the adapter for processing.
+ *
+ * Note: This requires the optional 'node-telegram-bot-api' package.
+ * Install with: bun add node-telegram-bot-api
  */
 
-import TelegramBot from "node-telegram-bot-api";
+// Dynamically import to handle optional dependency
+let TelegramBot: any;
+try {
+  TelegramBot = require("node-telegram-bot-api");
+} catch {
+  // Package not installed, will be handled in class constructor
+}
+
 import type { MessageEvent } from "../../gateway/events";
 import logger from "../../core/logging";
 
@@ -17,16 +27,23 @@ export interface TelegramListenerConfig {
 export class TelegramListener {
   private token: string;
   private polling: boolean;
-  private bot: TelegramBot | null = null;
+  private bot: any;
   private onMessage?: (event: MessageEvent) => void;
   private onError?: (error: Error) => void;
   private isListening = false;
 
   constructor(config: TelegramListenerConfig) {
+    if (!TelegramBot) {
+      throw new Error(
+        "Telegram integration requires 'node-telegram-bot-api' package. Install with: bun add node-telegram-bot-api"
+      );
+    }
+
     this.token = config.token;
     this.polling = config.polling ?? true;
     this.onMessage = config.onMessage;
     this.onError = config.onError;
+    this.bot = null;
   }
 
   setOnMessage(handler: (event: MessageEvent) => void): void {
@@ -43,7 +60,7 @@ export class TelegramListener {
   private _setupMessageHandler(): void {
     if (!this.bot) return;
 
-    this.bot.on("message", (msg: TelegramBot.Message) => {
+    this.bot.on("message", (msg: any) => {
       if (!msg.text) return;
 
       const event: MessageEvent = {
@@ -56,7 +73,7 @@ export class TelegramListener {
         isCommand: msg.text?.startsWith("/") ?? false,
         timestamp: msg.date * 1000 + "",
         attachments: msg.photo
-          ? msg.photo.map((p) => ({
+          ? msg.photo.map((p: any) => ({
               url: `https://api.telegram.org/file/bot${this.token}/${p.file_id}`,
               name: "photo.jpg",
               type: "image/jpeg",
@@ -67,7 +84,7 @@ export class TelegramListener {
       this.onMessage?.(event);
     });
 
-    this.bot.on("callback_query", (query) => {
+    this.bot.on("callback_query", (query: any) => {
       const event: MessageEvent = {
         channelId: query.message.chat.id.toString(),
         channelName: query.message.chat.title ?? query.message.chat.type,
@@ -143,7 +160,7 @@ export class TelegramListener {
     };
   }
 
-  getBot(): TelegramBot | null {
+  getBot(): any | null {
     return this.bot;
   }
 }

@@ -105,6 +105,16 @@ export class SlackTools {
 
       const channelId = args.channelId as string;
       const content = args.content as string;
+
+      // Validate required fields
+      if (!channelId || !content) {
+        return {
+          success: false,
+          output: "",
+          error: "Missing required fields: channelId and content",
+        };
+      }
+
       const blocks = args.blocks as unknown[] | undefined;
       const threadTs = args.threadTs as string | undefined;
 

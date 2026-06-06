@@ -55,9 +55,9 @@ describe("App", () => {
   });
 
   test("currentModeLabel returns label", () => {
-    expect(app.currentModeLabel()).toBe("Mgr");
+    expect(app.currentModeLabel()).toBe("T-800");
     app.cycleAgentMode();
-    expect(app.currentModeLabel()).toBe("Brow");
+    expect(app.currentModeLabel()).toBe("Term");
   });
 
   test("addUserMessage pushes message", () => {
@@ -251,8 +251,8 @@ describe("COMMANDS", () => {
 });
 
 describe("DEFAULT_MODES", () => {
-  test("has 4 modes", () => {
-    expect(DEFAULT_MODES.length).toBe(4);
+  test("has 2 modes", () => {
+    expect(DEFAULT_MODES.length).toBe(2);
   });
 
   test("modes have unique runners", () => {

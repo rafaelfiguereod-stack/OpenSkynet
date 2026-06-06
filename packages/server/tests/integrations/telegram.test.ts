@@ -4,9 +4,21 @@
  */
 
 import { test, describe, expect, beforeEach } from "bun:test";
-import { TelegramListener, TelegramTools, TelegramAdapter } from "../../src/integrations/telegram";
-import type { TelegramListenerConfig, TelegramToolsConfig } from "../../src/integrations/telegram";
-import type { ToolBus } from "../../src/agent/tools/bus";
+
+// Skip all telegram tests if package is not available
+let telegramAvailable = false;
+try {
+  require("node-telegram-bot-api");
+  telegramAvailable = true;
+} catch {
+  // Package not installed
+}
+
+if (!telegramAvailable) {
+  console.warn("Skipping Telegram tests - 'node-telegram-bot-api' package not installed");
+} else {
+  const { TelegramListener, TelegramTools, TelegramAdapter } = require("../../src/integrations/telegram");
+  const { ToolBus } = require("../../src/agent/tools/bus");
 
 describe("TelegramListener", () => {
   describe("constructor", () => {
@@ -351,3 +363,4 @@ describe("TelegramAdapter", () => {
     });
   });
 });
+} // End of if (telegramAvailable)

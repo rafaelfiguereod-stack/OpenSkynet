@@ -1,6 +1,6 @@
 import type { RPCServer } from "../server.js";
 import type { RPCHandlerDeps } from "../deps.js";
-import { saveSoul } from "../../agent/soul.js";
+import { saveSoul } from "../../agent/prompts/soul.js";
 
 export function registerSystemHandlers(
   server: RPCServer,

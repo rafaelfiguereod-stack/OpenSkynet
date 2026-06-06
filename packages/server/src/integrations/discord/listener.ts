@@ -86,7 +86,6 @@ export class DiscordListener {
             GatewayIntentBits.GuildMessages,
             GatewayIntentBits.MessageContent,
             GatewayIntentBits.DirectMessages,
-            GatewayIntentBits.MessageAttachments,
           ],
         });
 

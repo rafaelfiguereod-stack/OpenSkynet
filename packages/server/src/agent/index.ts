@@ -1,5 +1,17 @@
-export { AgentContext } from "./base";
-export { AgentConfig, DEFAULT_AGENT_CONFIG } from "./types";
+/**
+ * @deprecated Old agent system. Use T800Agent and TerminatorAgent from src/electron/agent instead.
+ *
+ * This module contains the legacy agent architecture that has been replaced by:
+ * - T800Agent: Direct execution agent with all tools
+ * - TerminatorAgent: Orchestrator for complex multi-step tasks
+ *
+ * The old agents (ManagerAgent, AgentRunner, etc.) have been removed.
+ * Only core infrastructure, monitoring, and utilities are kept for backward compatibility.
+ */
+
+// Core infrastructure
+export { AgentContext } from "./core/base";
+export { AgentConfig, DEFAULT_AGENT_CONFIG } from "./core/types";
 export {
   AgentState,
   createInitialState,
@@ -7,37 +19,43 @@ export {
   addObservation,
   addReflection,
   addPlanStep,
-} from "./state";
-export { InterruptSignal, AgentInterruptedError } from "./interrupt";
+} from "./core/state";
+export { InterruptSignal, AgentInterruptedError } from "./core/interrupt";
+
+// Monitoring and safety
 export {
   AuditLog,
   SharedScratchpad,
   assessRisk,
   checkBudget,
-} from "./guardrails";
-export type { Budget, RiskAssessment, AuditEntry } from "./guardrails";
-export { ContextCompressor } from "./compressor";
+} from "./monitoring/guardrails";
+export type { Budget, RiskAssessment, AuditEntry } from "./monitoring/guardrails";
+export { ContextCompressor } from "./memory/compressor";
+
+// Progress tracking
 export {
   ProgressTracker,
   generateMilestonesPrompt,
   parseMilestones,
-} from "./progress";
-export type { Milestone } from "./progress";
-export { CheckpointManager } from "./checkpoint";
-export type { Checkpoint } from "./checkpoint";
-export { loadSoul, saveSoul, getDefaultSoul } from "./soul";
-export { ContainerManager } from "./container";
+} from "./memory/progress";
+export type { Milestone } from "./memory/progress";
+
+// Checkpoint management
+export { CheckpointManager } from "./memory/checkpoint";
+export type { Checkpoint } from "./memory/checkpoint";
+
+// Prompts and personality
+export { loadSoul, saveSoul, getDefaultSoul } from "./prompts/soul";
+export { ContainerManager } from "./utils/container";
+
+// Locales
 export {
   SCHEDULE_KEYWORDS,
   CHAT_KEYWORDS,
   ACTION_VERBS,
-} from "./locales";
-export { TaskClassifier } from "./planning/task-classifier";
-export type { TaskCategory } from "./planning/task-classifier";
-export { TaskPlanner } from "./planning/task-planner";
-export type { TaskPlan } from "./planning/task-planner";
-export type { ManagerPlan } from "./planning/manager-plan";
-export { ManagerAgent } from "./manager";
-export { TaskPlannerRegex } from "./planner";
-export { PromptBuilder } from "./prompts/builder";
-export { AgentRunner } from "./runner";
+} from "./prompts/locales";
+
+// Skills
+export { SkillAuditor } from "./skills/skill-auditor";
+export { SkillLearnerAgent as SkillLearner } from "./skills/skill-learner";
+export { TraceToSkill as traceToSkill } from "./skills/trace-to-skill";

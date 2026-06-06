@@ -76,7 +76,7 @@ export class TelegramAdapter extends BaseAdapter {
     try {
       // Try to get chat info from recent updates
       // This is a simplified version - in production you'd cache this
-      const updates = await botInstance.getUpdates();
+      const updates = await botInstance.api.getUpdates();
       for (const update of updates) {
         const chat = update.message?.chat || update.callback_query?.message?.chat;
         if (chat) {
@@ -114,7 +114,7 @@ export class TelegramAdapter extends BaseAdapter {
       const sendOptions: {
         parse_mode?: "Markdown" | "HTML";
         disable_notification?: boolean;
-        reply_to_message_id?: number | string;
+        reply_to_message_id?: number;
       } = {};
 
       if (options?.parseMode && options.parseMode !== "None") {
@@ -127,7 +127,7 @@ export class TelegramAdapter extends BaseAdapter {
         sendOptions.reply_to_message_id = parseInt(options.replyToMessageId, 10);
       }
 
-      await botInstance.sendMessage(chatId, content, sendOptions);
+      await botInstance.api.sendMessage(chatId, content, sendOptions);
       return { success: true };
     } catch (err) {
       return {
@@ -151,7 +151,7 @@ export class TelegramAdapter extends BaseAdapter {
     if (!botInstance) return { success: false, error: "Telegram bot instance not available" };
 
     try {
-      await botInstance.sendPhoto(chatId, photo, { caption });
+      await botInstance.api.sendPhoto(chatId, photo, { caption });
       return { success: true };
     } catch (err) {
       return {
@@ -170,7 +170,7 @@ export class TelegramAdapter extends BaseAdapter {
     const botInstance = this.bot.getBot();
     if (!botInstance) throw new Error("Telegram bot instance not available");
 
-    const chat = await botInstance.getChat(chatId);
+    const chat = await botInstance.api.getChat(chatId);
 
     return {
       id: chat.id.toString(),

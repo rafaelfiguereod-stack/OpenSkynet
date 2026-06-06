@@ -4,21 +4,21 @@
  */
 
 const HIGH_IMPORTANCE_PATTERNS = [
-  /\b(always|never|must|important|critical|essential)\b/gi,
-  /\b(preference|prefer|favorite|default)\b/gi,
-  /\b(password|api.?key|token|secret|credential)\b/gi,
-  /\b(error|failed|bug|fix|workaround)\b/gi,
-  /\b(rule|policy|constraint|requirement)\b/gi,
+  /\b(always|never|must|important|critical|essential)\b/i,
+  /\b(preferences?|prefers?|favorites?|defaults?)\b/i,
+  /\b(password|api.?key|token|secret|credential)\b/i,
+  /\b(error|failed|bug|fix|workaround)\b/i,
+  /\b(rule|policy|constraint|requirement)\b/i,
 ];
 
 const LOW_IMPORTANCE_PATTERNS = [
-  /\b(okay|ok|sure|fine|whatever)\b/gi,
-  /\b(test|testing|tmp|temp)\b/gi,
-  /\b(maybe|perhaps|might|could)\b/gi,
+  /\b(okay|ok|sure|fine|whatever)\b/i,
+  /\b(test|testing|tmp|temp)\b/i,
+  /\b(maybe|perhaps|might|could)\b/i,
 ];
 
-const FACT_PATTERN = /^(the|this|that|it|there|our|my|user|system|sediman)\b/gi;
-const PROCEDURE_PATTERN = /\b(step|first|then|next|after|before|click|navigate|type|scroll|search|open)\b/gi;
+const FACT_PATTERN = /^(the|this|that|it|there|our|my|user|system|sediman)\b/i;
+const PROCEDURE_PATTERN = /\b(step|first|then|next|after|before|click|navigate|type|scroll|search|open)\b/i;
 
 export interface ImportanceScore {
   score: number;
@@ -27,7 +27,7 @@ export interface ImportanceScore {
 }
 
 export function scoreImportance(content: string): ImportanceScore {
-  if (!content) {
+  if (!content || !content.trim()) {
     return { score: 0, confidence: "low", reasons: ["empty_content"] };
   }
 
@@ -37,6 +37,7 @@ export function scoreImportance(content: string): ImportanceScore {
 
   // Check high importance patterns
   for (const pattern of HIGH_IMPORTANCE_PATTERNS) {
+    pattern.lastIndex = 0; // Reset regex state
     const matches = content.match(pattern);
     if (matches && matches.length > 0) {
       score += 0.15 * matches.length;
@@ -46,6 +47,7 @@ export function scoreImportance(content: string): ImportanceScore {
 
   // Check low importance patterns
   for (const pattern of LOW_IMPORTANCE_PATTERNS) {
+    pattern.lastIndex = 0; // Reset regex state
     const matches = content.match(pattern);
     if (matches && matches.length > 0) {
       score -= 0.1 * matches.length;
@@ -63,17 +65,20 @@ export function scoreImportance(content: string): ImportanceScore {
   }
 
   // Structure-based scoring
-  if (content.count("\n") > 3) {
+  const newlineCount = (content.match(/\n/g) || []).length;
+  if (newlineCount > 3) {
     score += 0.05;
     reasons.push("structured_content");
   }
 
   // Content type detection
+  FACT_PATTERN.lastIndex = 0; // Reset regex state
   if (FACT_PATTERN.test(content)) {
     score += 0.05;
     reasons.push("factual_statement");
   }
 
+  PROCEDURE_PATTERN.lastIndex = 0; // Reset regex state
   if (PROCEDURE_PATTERN.test(content)) {
     score += 0.05;
     reasons.push("procedural_content");

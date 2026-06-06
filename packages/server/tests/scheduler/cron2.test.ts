@@ -1,6 +1,6 @@
 /** Tests for Scheduler Cron */
 import { test, describe, expect, beforeEach } from "bun:test";
-import { CronManager, validateCronExpr, CronScheduler } from "../../../src/scheduler/cron";
+import { CronManager, validateCronExpr, CronScheduler } from "../../src/scheduler/cron.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 

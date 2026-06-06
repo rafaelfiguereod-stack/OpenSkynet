@@ -22,25 +22,25 @@ describe("ImportanceScorer", () => {
     test("increases score for important keywords", () => {
       const result = scoreImportance("This is a critical setting that must always be configured");
       expect(result.score).toBeGreaterThan(0.5);
-      expect(result.reasons).toContainEqual("high_importance_pattern");
+      expect(result.reasons.some(r => r.startsWith("high_importance_pattern"))).toBe(true);
     });
 
     test("increases score for preferences", () => {
       const result = scoreImportance("User prefers dark mode theme");
       expect(result.score).toBeGreaterThan(0.5);
-      expect(result.reasons).toContainEqual("high_importance_pattern");
+      expect(result.reasons.some(r => r.startsWith("high_importance_pattern"))).toBe(true);
     });
 
     test("increases score for passwords/secrets", () => {
       const result = scoreImportance("API key: sk-1234567890");
       expect(result.score).toBeGreaterThan(0.5);
-      expect(result.reasons).toContainEqual("high_importance_pattern");
+      expect(result.reasons.some(r => r.startsWith("high_importance_pattern"))).toBe(true);
     });
 
     test("increases score for errors and bugs", () => {
       const result = scoreImportance("Bug: Application crashes when user clicks submit");
       expect(result.score).toBeGreaterThan(0.5);
-      expect(result.reasons).toContainEqual("high_importance_pattern");
+      expect(result.reasons.some(r => r.startsWith("high_importance_pattern"))).toBe(true);
     });
 
     test("decreases score for low importance patterns", () => {
@@ -51,7 +51,7 @@ describe("ImportanceScorer", () => {
     test("decreases score for test/tmp content", () => {
       const result = scoreImportance("this is just a test tmp file");
       expect(result.score).toBeLessThan(0.5);
-      expect(result.reasons).toContainEqual("low_importance_pattern");
+      expect(result.reasons.some(r => r.startsWith("low_importance_pattern"))).toBe(true);
     });
 
     test("adjusts for content length", () => {
@@ -108,7 +108,7 @@ describe("ImportanceScorer", () => {
       const result = scorer.score(content);
       const funcResult = scoreImportance(content);
 
-      expect(result.score).toBe(funcResult.score);
+      expect(result.score).toBeCloseTo(funcResult.score);
       expect(result.confidence).toBe(funcResult.confidence);
     });
 

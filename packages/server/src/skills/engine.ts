@@ -26,11 +26,19 @@ export class SkillEngine {
   private useCache: boolean;
   private cache: Map<string, CacheEntry> = new Map();
   private repoSkillsDir: string | null;
+  private _lazyInitDone = false;
 
   constructor(skillsDir?: string, useCache = true) {
     const config = getConfig();
     this.skillsDir = skillsDir ?? config.skillsDir;
     this.useCache = useCache;
+    this.projectDir = null;
+    this.repoSkillsDir = null;
+  }
+
+  private _ensureInit(): void {
+    if (this._lazyInitDone) return;
+    this._lazyInitDone = true;
     this.projectDir = this.findProjectSkillsDir();
     this.repoSkillsDir = this.findRepoSkillsDir();
     this.ensureDir(this.skillsDir);
@@ -167,6 +175,7 @@ export class SkillEngine {
     steps: string[],
     extra: Partial<SkillData> = {},
   ): Record<string, unknown> {
+    this._ensureInit();
     if (!this.safeName(name)) {
       throw new SkillError(
         `Invalid skill name: "${name}". Use lowercase alphanumeric with hyphens.`,
@@ -199,6 +208,7 @@ export class SkillEngine {
   }
 
   read(name: string): Record<string, unknown> | null {
+    this._ensureInit();
     const dir = this.skillDir(name, true);
     this.validatePath(dir);
     return this.readCached(dir);
@@ -209,6 +219,7 @@ export class SkillEngine {
   }
 
   listSkills(): Array<Record<string, unknown>> {
+    this._ensureInit();
     const results: Array<Record<string, unknown>> = [];
     const seen = new Set<string>();
 
@@ -266,6 +277,7 @@ export class SkillEngine {
   }
 
   delete(name: string): boolean {
+    this._ensureInit();
     const dir = this.skillDir(name, true);
     this.validatePath(dir);
     if (!existsSync(dir)) return false;
@@ -297,6 +309,7 @@ export class SkillEngine {
     name: string,
     updates: Record<string, unknown>,
   ): Record<string, unknown> | null {
+    this._ensureInit();
     const dir = this.skillDir(name, true);
     this.validatePath(dir);
     const existing = this.readCached(dir);
@@ -327,6 +340,7 @@ export class SkillEngine {
   }
 
   rollback(name: string, version?: number): Record<string, unknown> | null {
+    this._ensureInit();
     const dir = this.skillDir(name, true);
     this.validatePath(dir);
     const historyDir = join(dir, "history");
@@ -359,6 +373,7 @@ export class SkillEngine {
   }
 
   listHistory(name: string): Array<{ version: number; modified: string }> {
+    this._ensureInit();
     const dir = this.skillDir(name, true);
     const historyDir = join(dir, "history");
     if (!existsSync(historyDir)) return [];
@@ -373,6 +388,7 @@ export class SkillEngine {
   }
 
   recordUsage(name: string): void {
+    this._ensureInit();
     const dir = this.skillDir(name, true);
     this.validatePath(dir);
     const data = this.readCached(dir);

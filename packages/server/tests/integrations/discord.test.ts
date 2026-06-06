@@ -171,42 +171,41 @@ describe("DiscordTools", () => {
     });
 
     test("registers list_channels tool", () => {
-      let registeredDef: any = null;
+      const registered: any[] = [];
 
-      mockBus.register = (def: any) => {
-        registeredDef = def;
+      mockBus.register = (def: any, handler: any) => {
+        registered.push({ def, handler });
       };
 
       tools.register(mockBus);
 
-      expect(registeredDef.name).toBe("discord_list_channels");
+      const listChannelsTool = registered.find(r => r.def.name === "discord_list_channels");
+      expect(listChannelsTool).toBeDefined();
+      expect(listChannelsTool?.def.name).toBe("discord_list_channels");
     });
   });
 
   describe("list_channels", () => {
-    test("lists all channels", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let listChannelsHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      listChannelsHandler = handlers.get("discord_list_channels");
+    });
 
-      const result = await handler("discord_list_channels", {});
+    test("lists all channels", async () => {
+      const result = await listChannelsHandler("discord_list_channels", {});
 
       expect(result.success).toBe(true);
       expect(result.output).toContain("general");
     });
 
     test("filters by guild when provided", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
-      };
-
-      tools.register(mockBus);
-
-      const result = await handler("discord_list_channels", {
+      const result = await listChannelsHandler("discord_list_channels", {
         guildId: "guild123",
       });
 
@@ -215,15 +214,19 @@ describe("DiscordTools", () => {
   });
 
   describe("send_message", () => {
-    test("sends message to channel", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let sendMessageHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      sendMessageHandler = handlers.get("discord_send_message");
+    });
 
-      const result = await handler("discord_send_message", {
+    test("sends message to channel", async () => {
+      const result = await sendMessageHandler("discord_send_message", {
         channelId: "123",
         content: "Hello world",
       });
@@ -232,14 +235,7 @@ describe("DiscordTools", () => {
     });
 
     test("requires channelId and content", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
-      };
-
-      tools.register(mockBus);
-
-      const result = await handler("discord_send_message", {
+      const result = await sendMessageHandler("discord_send_message", {
         channelId: "123",
       });
 
@@ -248,15 +244,19 @@ describe("DiscordTools", () => {
   });
 
   describe("get_messages", () => {
-    test("retrieves channel messages", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let getMessagesHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      getMessagesHandler = handlers.get("discord_get_messages");
+    });
 
-      const result = await handler("discord_get_messages", {
+    test("retrieves channel messages", async () => {
+      const result = await getMessagesHandler("discord_get_messages", {
         channelId: "123",
         limit: 50,
       });
@@ -266,15 +266,19 @@ describe("DiscordTools", () => {
   });
 
   describe("create_thread", () => {
-    test("creates new thread", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let createThreadHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      createThreadHandler = handlers.get("discord_create_thread");
+    });
 
-      const result = await handler("discord_create_thread", {
+    test("creates new thread", async () => {
+      const result = await createThreadHandler("discord_create_thread", {
         channelId: "123",
         name: "Test Thread",
         message: "Starting thread",
@@ -285,15 +289,19 @@ describe("DiscordTools", () => {
   });
 
   describe("add_reaction", () => {
-    test("adds reaction to message", async () => {
-      let handler: any = null;
-      mockBus.register = (_def: any, h: any) => {
-        handler = h;
+    let addReactionHandler: any;
+
+    beforeEach(() => {
+      const handlers = new Map<string, any>();
+      mockBus.register = (def: any, h: any) => {
+        handlers.set(def.name, h);
       };
-
       tools.register(mockBus);
+      addReactionHandler = handlers.get("discord_add_reaction");
+    });
 
-      const result = await handler("discord_add_reaction", {
+    test("adds reaction to message", async () => {
+      const result = await addReactionHandler("discord_add_reaction", {
         channelId: "123",
         messageId: "456",
         emoji: "👍",

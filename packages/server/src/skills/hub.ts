@@ -167,7 +167,7 @@ export class GitHubInstaller {
     });
     if (!res.ok) throw new SkillError(`GitHub fetch failed: ${res.status}`, "GITHUB_ERROR");
 
-    const raw = await res.json();
+    const raw = await res.json() as Record<string, unknown>;
     const skillData = SkillDataSchema.parse({ ...raw, source: `github:${owner}/${repo}` });
     const name = skillData.name;
 
@@ -204,7 +204,7 @@ export class GitHubInstaller {
     });
     if (!res.ok) return { hasUpdate: false, message: "Could not check remote." };
 
-    const remote = await res.json();
+    const remote = await res.json() as { version?: number };
     const remoteVersion = remote.version ?? 0;
     const local = engine.read(name);
     const localVersion = (local?.version as number) ?? 0;

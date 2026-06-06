@@ -81,7 +81,7 @@ export class SlackAdapter extends BaseAdapter {
 
     try {
       const result = await client.conversations.list({
-        types: ["public_channel", "private_channel"],
+        types: "public_channel,private_channel",
         exclude_archived: excludeArchived,
       });
 

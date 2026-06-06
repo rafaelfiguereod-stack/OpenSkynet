@@ -56,6 +56,7 @@ export function scanContent(content: string): SecurityScanResult {
   const threats: string[] = [];
 
   for (const [pattern, name] of THREAT_PATTERNS) {
+    pattern.lastIndex = 0; // Reset regex state
     if (pattern.test(content)) {
       threats.push(name);
     }

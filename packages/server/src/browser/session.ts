@@ -1,14 +1,12 @@
-import {
-  chromium,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from "playwright";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { getConfig } from "../core/config";
 import logger from "../core/logging";
 import { buildStealthLaunchArgs } from "./stealth";
+
+type Browser = import("playwright").Browser;
+type BrowserContext = import("playwright").BrowserContext;
+type Page = import("playwright").Page;
 
 export class BrowserSession {
   headless: boolean;
@@ -58,6 +56,8 @@ export class BrowserSession {
 
   async start(): Promise<void> {
     if (this._started) return;
+
+    const { chromium } = await import("playwright");
 
     mkdirSync(this.userDataDir, { recursive: true });
 
