@@ -6,18 +6,18 @@ export function registerSkillHandlers(
   deps: RPCHandlerDeps,
 ): void {
   server.register("skills.list", async () => {
-    return { skills: deps.skillEngine.listSkills() };
+    return deps.skillEngine.listSkills();
   });
 
   server.register("skills.list_all", async () => {
-    return { skills: deps.skillEngine.listSkills() };
+    return deps.skillEngine.listSkills();
   });
 
   server.register("skills.get", async (params) => {
     const name = params.name as string;
     const skill = deps.skillEngine.getSkill(name);
     if (!skill) return { error: `Skill "${name}" not found` };
-    return { skill };
+    return skill;
   });
 
   server.register("skills.create", async (params) => {
@@ -46,14 +46,22 @@ export function registerSkillHandlers(
     const result = await deps.agentLoop.run(
       (skill.description as string) ?? name,
     );
-    return { result };
+    const agentResult = result as unknown as Record<string, unknown>;
+    return {
+      task: (agentResult.task as string) ?? name,
+      result: (agentResult.result as string) ?? "completed",
+      success: (agentResult.success as boolean) ?? true,
+      steps: (agentResult.steps as unknown[]) ?? [],
+      skill_created: agentResult.skill_created as string | null ?? null,
+      scheduled_job_id: agentResult.scheduled_job_id as string | null ?? null,
+      elapsed_secs: (agentResult.elapsed_secs as number) ?? 0,
+    };
   });
 
   server.register("skills.search", async (params) => {
     const query = params.query as string;
     const scope = (params.scope as "internal" | "hub" | "all") ?? "all";
     const limit = (params.limit as number) ?? 10;
-    const results = await deps.skillSearch.search(query, scope, limit);
-    return { results };
+    return deps.skillSearch.search(query, scope, limit);
   });
 }

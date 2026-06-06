@@ -1,5 +1,6 @@
 import type { RPCServer } from "../server.js";
 import type { RPCHandlerDeps } from "../deps.js";
+import { saveSoul } from "../../agent/soul.js";
 
 export function registerSystemHandlers(
   server: RPCServer,
@@ -14,7 +15,18 @@ export function registerSystemHandlers(
 
   server.register("system.screenshot", async () => {
     const screenshot = await deps.browserSession.takeScreenshot();
-    return { screenshot: screenshot ?? "" };
+    return { data: screenshot ?? "" };
+  });
+
+  server.register("system.set_soul", async (params) => {
+    const text = params.text as string;
+    const reset = params.reset as boolean | undefined;
+    if (reset) {
+      saveSoul("");
+    } else {
+      saveSoul(text);
+    }
+    return { ok: true };
   });
 
   server.register("system.btw", async () => {

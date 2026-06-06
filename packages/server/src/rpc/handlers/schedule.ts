@@ -6,8 +6,7 @@ export function registerScheduleHandlers(
   deps: RPCHandlerDeps,
 ): void {
   server.register("schedule.list", async () => {
-    const jobs = deps.cronManager.listJobs();
-    return { jobs };
+    return deps.cronManager.listJobs();
   });
 
   server.register("schedule.add", async (params) => {
@@ -27,11 +26,11 @@ export function registerScheduleHandlers(
       baseUrl,
       notify,
     );
-    return { id };
+    return { job_id: id };
   });
 
   server.register("schedule.remove", async (params) => {
-    const id = params.id as string;
+    const id = (params.job_id ?? params.id) as string;
     const removed = deps.cronManager.removeJob(id);
     return { removed };
   });

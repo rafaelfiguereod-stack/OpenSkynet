@@ -7,20 +7,18 @@ export function registerHubHandlers(
 ): void {
   server.register("hub.browse", async (params) => {
     const category = params.category as string | undefined;
-    const skills = await deps.hubClient.browse(category);
-    return { skills };
+    return deps.hubClient.browse(category);
   });
 
   server.register("hub.search", async (params) => {
     const query = params.query as string;
-    const skills = await deps.hubClient.search(query);
-    return { skills };
+    return deps.hubClient.search(query);
   });
 
   server.register("hub.info", async (params) => {
     const name = params.name as string;
     const info = await deps.hubClient.info(name);
-    return { info };
+    return info;
   });
 
   server.register("hub.install", async (params) => {

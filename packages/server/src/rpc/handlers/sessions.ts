@@ -15,7 +15,7 @@ export function registerSessionHandlers(
   server.register("sessions.list", async (params) => {
     const limit = (params.limit as number) ?? 20;
     const sessions = await getRecentSessions(limit);
-    return { sessions };
+    return sessions;
   });
 
   server.register("sessions.search", async (params) => {
@@ -34,14 +34,14 @@ export function registerSessionHandlers(
   });
 
   server.register("sessions.get", async (params) => {
-    const id = params.id as string;
+    const id = (params.session_id ?? params.id) as string;
     const session = await getSessionById(id);
     if (!session) return { error: `Session "${id}" not found` };
-    return { session };
+    return session;
   });
 
   server.register("sessions.delete", async (params) => {
-    const id = params.id as string;
+    const id = (params.session_id ?? params.id) as string;
     const deleted = await deleteSession(id);
     return { deleted };
   });

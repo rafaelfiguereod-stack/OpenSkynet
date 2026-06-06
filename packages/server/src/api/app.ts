@@ -14,6 +14,7 @@ import { createSandboxRoutes, createSystemRoutes } from "./routes/sandbox";
 import { createAgentRoutes } from "./routes/agent.js";
 import { createAuthRoutes } from "./routes/auth.js";
 import { createModelRoutes } from "./routes/model.js";
+import { createFileRoutes } from "./routes/files.js";
 import type { AgentLoop } from "../agent/loop";
 import type { LLMProvider } from "../llm/provider";
 
@@ -46,6 +47,7 @@ export function createApiApp(deps: ApiDeps): Hono {
   app.route("/api/agent", createAgentRoutes(deps));
   app.route("/api/auth", createAuthRoutes());
   app.route("/api/model", createModelRoutes(deps));
+  app.route("/api/files", createFileRoutes(deps));
 
   app.get("/api/health", (c) => c.json({ status: "ok" }));
 

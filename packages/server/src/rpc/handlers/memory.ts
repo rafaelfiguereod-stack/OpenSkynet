@@ -6,13 +6,13 @@ export function registerMemoryHandlers(
   deps: RPCHandlerDeps,
 ): void {
   server.register("memory.get", async (params) => {
-    const target = (params.target as string) ?? "memory";
-    const query = params.query as string | undefined;
-    if (query) {
-      const results = deps.memory.search(query);
-      return { entries: results };
-    }
-    return { entries: [] };
+    const allMemory = deps.memory.search("", 10000);
+    return {
+      memory: allMemory.map((e) => String((e as unknown as Record<string, unknown>).content ?? "")).join("\n"),
+      user: allMemory.map((e) => String((e as unknown as Record<string, unknown>).content ?? "")).join("\n"),
+      memory_entries: allMemory.length,
+      user_entries: allMemory.length,
+    };
   });
 
   server.register("memory.add", async (params) => {
