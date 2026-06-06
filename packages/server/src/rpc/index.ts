@@ -114,3 +114,42 @@ export function createRPCServer(deps: RPCHandlerDeps): RPCServer {
   }
   return server;
 }
+
+/**
+ * Build a handler map for WebSocket RPC connections
+ * @param deps - RPC handler dependencies
+ * @param getUptimeSecs - Function to get server uptime in seconds
+ * @returns Map of method names to RPC handlers
+ */
+export function buildHandlerMap(
+  deps: RPCHandlerDeps,
+  getUptimeSecs: () => number,
+): Map<string, RPCHandler> {
+  const handlerMap = new Map<string, RPCHandler>();
+  const register = (method: string, handler: RPCHandler) => {
+    handlerMap.set(method, handler);
+  };
+  const fakeServer = {
+    register,
+    handlers: handlerMap,
+    getUptimeSecs,
+  } as unknown as RPCServer;
+
+  registerSystemHandlers(fakeServer, deps);
+  registerAgentHandlers(fakeServer, deps);
+  registerBrowserHandlers(fakeServer, deps);
+  registerSkillHandlers(fakeServer, deps);
+  registerHubHandlers(fakeServer, deps);
+  registerMemoryHandlers(fakeServer, deps);
+  registerSessionHandlers(fakeServer, deps);
+  registerScheduleHandlers(fakeServer, deps);
+  registerModelHandlers(fakeServer, deps);
+  registerAuthHandlers(fakeServer, deps);
+  registerTerminalHandlers(fakeServer, deps);
+  registerRecordHandlers(fakeServer, deps);
+  registerIntegrationHandlers(fakeServer, deps);
+  registerCheckpointHandlers(fakeServer, deps);
+  registerSandboxHandlers(fakeServer, deps);
+
+  return handlerMap;
+}
