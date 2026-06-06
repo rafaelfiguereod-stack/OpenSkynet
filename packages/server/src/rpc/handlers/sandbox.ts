@@ -1,5 +1,6 @@
 import type { RPCServer } from "../server.js";
 import type { RPCHandlerDeps } from "../deps.js";
+import { takeBrowserScreenshot } from "../../agent/tools/browser-tools.js";
 
 export function registerSandboxHandlers(
   server: RPCServer,
@@ -34,15 +35,24 @@ export function registerSandboxHandlers(
       return { success: false, error: "Browser not started" };
     }
     try {
-      const screenshot = await deps.browserSession.takeScreenshot();
+      // Try Openbrowser screenshot first, fall back to browser session
+      let screenshot = await takeBrowserScreenshot();
+      if (!screenshot) {
+        screenshot = await deps.browserSession.takeScreenshot();
+      }
       return { success: true, has_screenshot: !!screenshot };
     } catch (err) {
       return { success: false, error: (err as Error).message };
     }
   });
 
-  server.register("sandbox.screenshot", async () => {
-    const screenshot = await deps.browserSession.takeScreenshot();
+  server.register("sandbox.screenshot", async (params) => {
+    const instanceId = params.instanceId as string | undefined;
+    // Try Openbrowser screenshot first, fall back to browser session
+    let screenshot = await takeBrowserScreenshot(instanceId);
+    if (!screenshot && deps.browserSession.isStarted) {
+      screenshot = await deps.browserSession.takeScreenshot();
+    }
     return { screenshot: screenshot ?? "" };
   });
 }
