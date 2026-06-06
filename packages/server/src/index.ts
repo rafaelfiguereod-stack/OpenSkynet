@@ -4,7 +4,12 @@ import { initSentry } from "./core/sentry";
 import { initDb, closeDb } from "./store/db";
 import { createRPCServer } from "./rpc";
 import { startApiServer } from "./api";
-import { startTUI } from "./tui/index.js";
+import { getConfig } from "./core/config";
+import { setupLogging, createLogger } from "./core/logging";
+import { initSentry } from "./core/sentry";
+import { initDb, closeDb } from "./store/db";
+import { createRPCServer } from "./rpc";
+import { startApiServer } from "./api";
 import { createProvider } from "./llm/provider";
 import { FileMemoryStrategy } from "./memory/strategies/file-memory";
 import { SkillEngine } from "./skills/engine";
@@ -20,11 +25,11 @@ import { BrowserSession } from "./browser/session";
 import { BrowserController } from "./browser/controller";
 import type { RPCHandlerDeps } from "./rpc/deps";
 
-function parseMode(argv: string[]): "rpc" | "api" | "all" | "tui" {
+function parseMode(argv: string[]): "rpc" | "api" | "all" {
   const idx = argv.indexOf("--mode");
   if (idx !== -1 && idx + 1 < argv.length) {
     const mode = argv[idx + 1];
-    if (mode === "rpc" || mode === "api" || mode === "tui") return mode;
+    if (mode === "rpc" || mode === "api") return mode;
   }
   return "all";
 }
@@ -107,18 +112,14 @@ async function main() {
     agentLoop,
   };
 
-  if (mode === "tui") {
-    await startTUI(rpcDeps);
-    return;
-  }
-
   const servers: { stop: () => Promise<void> }[] = [];
 
   if (mode === "rpc" || mode === "all") {
     const rpcServer = createRPCServer(rpcDeps);
-    await rpcServer.listen("/tmp/sediman-python.sock");
+    const rpcSocket = process.env.SEDIMAN_RPC_SOCKET ?? "/tmp/sediman.sock";
+    await rpcServer.listen(rpcSocket);
     servers.push(rpcServer);
-    logger.info({ mode: "rpc", socket: "/tmp/sediman-python.sock" }, "server_started");
+    logger.info({ mode: "rpc", socket: rpcSocket }, "server_started");
   }
 
   if (mode === "api" || mode === "all") {

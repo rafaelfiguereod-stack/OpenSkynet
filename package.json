@@ -6,7 +6,7 @@
     "packages/app"
   ],
   "scripts": {
-    "tui": "bun run packages/server/src/index.ts --mode tui",
+    "tui": "bun run packages/server/src/tui-runner.ts",
     "backend": "bun run packages/server/src/index.ts --mode api",
     "desktop": "cd packages/app && npm start",
     "app": "cd packages/app && npm start",
