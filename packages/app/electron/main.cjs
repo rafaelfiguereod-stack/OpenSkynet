@@ -24,6 +24,7 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       webviewTag: true,
+      webSecurity: false,
       additionalArguments: isShowcase ? ['--showcase'] : [],
     },
     show: false,
