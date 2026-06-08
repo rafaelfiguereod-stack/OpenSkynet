@@ -294,10 +294,16 @@ export class AgentLoop {
           const errorMsg = err instanceof Error ? err.message : String(err);
           logger.error({ err: errorMsg, iteration }, "llm_call_failed");
 
-          // Emit error event
-          this.streamEmitter.emitError(errorMsg, true);
+          this.streamEmitter.emitError(errorMsg, false);
 
           this.steps.push({ phase: "executing", action: "llm_error", detail: errorMsg });
+
+          if (category === "browser" && iteration < this.maxIterations - 1) {
+            await new Promise(r => setTimeout(r, 2000));
+            this.addSystemMessage(`LLM error occurred: ${errorMsg}. Retrying...`);
+            continue;
+          }
+
           finalResult = `LLM error: ${errorMsg}`;
           break;
         }

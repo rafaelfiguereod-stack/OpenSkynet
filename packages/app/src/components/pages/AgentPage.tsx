@@ -317,12 +317,7 @@ export function AgentPage() {
           setRetryProgress(null);
         },
         onError: (error: string) => {
-          updateMessage(conversationId, assistantMsgId, {
-            status: 'error',
-            content: `Error: ${error}`,
-          });
-          setIsStreaming(false);
-          setRetryProgress(null);
+          console.warn('[AgentPage] Non-fatal agent error (agent may recover):', error);
         },
       },
       { model, provider }

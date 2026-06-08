@@ -51,11 +51,7 @@ class ChatService {
               }
               break;
             case 'error':
-              if (!isDone) {
-                isDone = true;
-                options.onError?.(data.error || 'Unknown error');
-                reject(new Error(data.error || 'Unknown error'));
-              }
+              options.onError?.(data.error || 'Unknown error');
               break;
           }
         },
