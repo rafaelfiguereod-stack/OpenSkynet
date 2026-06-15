@@ -23,7 +23,7 @@
     "benchmark:browsecomp": "bun scripts/run-benchmarks.ts browsecomp"
   },
   "dependencies": {
-    "@mozilla/readability": "^0.5.0",
+    "@mozilla/readability": "^0.6.0",
     "@sentry/node": "^10.56.0",
     "@slack/socket-mode": "^2.0.3",
     "@slack/web-api": "^7.9.1",
